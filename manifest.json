@@ -1,7 +1,7 @@
 {
-  "name": "Spunti",
-  "short_name": "Spunti",
-  "description": "Archivio di video, idee e spunti di lavoro per il portiere",
+  "name": "GK Mind",
+  "short_name": "GK Mind",
+  "description": "Archivio di video, idee e lavagna di lavoro per il preparatore dei portieri",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
