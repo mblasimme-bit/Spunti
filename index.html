@@ -187,6 +187,31 @@ textarea.campo-in { resize: vertical; min-height: 80px; line-height: 1.4; }
 @media (max-width: 700px) { .lav-vista { height: calc(100vh - 300px); } }
 .filtro-fonte { max-width: 380px; }
 
+/* ---------- Home a widget ---------- */
+.home { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.widget { background: var(--sup); border: 1px solid var(--bordo); border-radius: 18px; padding: 16px; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); min-width: 0; }
+.widget.largo { grid-column: 1 / -1; }
+@media (min-width: 1000px) { .widget.largo { grid-column: span 2; } }
+.widget-testa { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.widget-titolo { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.3px; color: var(--t1); }
+.widget-link { background: none; border: none; color: var(--oro); font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 2px; }
+.widget-vuoto { margin: 4px 0 8px; font-size: 13px; line-height: 1.5; color: var(--t3); }
+.widget-nota { margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--t3); }
+.tessere { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tessera { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px; border-radius: 14px; border: 1px solid var(--bordo); background: var(--sup2); cursor: pointer; color: var(--t2); font-size: 12px; }
+.tessera .num { font-size: 26px; font-weight: 800; color: var(--oro); line-height: 1.1; }
+.lista-widget { display: flex; flex-direction: column; gap: 6px; }
+.riga-widget { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--bordo); background: var(--sup2); color: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.riga-titolo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.riga-widget .stella { position: static; background: none; border: none; width: auto; height: auto; color: var(--oro); }
+.striscia { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.mini-spunto { flex: 0 0 150px; display: flex; flex-direction: column; gap: 6px; background: none; border: none; padding: 0; text-align: left; color: inherit; cursor: pointer; }
+.mini-spunto-img { display: block; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: rgba(255, 255, 255, 0.06); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.mini-spunto-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mini-spunto-titolo { font-size: 12px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mini-lav-box { display: block; width: 100%; height: 190px; border: 1px solid var(--bordo); border-radius: 14px; background: rgba(0, 0, 0, 0.35); padding: 8px; cursor: pointer; }
+.mini-lav { width: 100%; height: 100%; display: block; }
+
 </style>
 </head>
 <body>
@@ -2101,6 +2126,305 @@ function SincronizzaGestionale({
     onClick: onChiudi
   }, "Annulla"))));
 }
+function Widget({
+  titolo,
+  azione,
+  onAzione,
+  larghezza,
+  children
+}) {
+  return React.createElement("section", {
+    className: "widget" + (larghezza ? " " + larghezza : "")
+  }, React.createElement("div", {
+    className: "widget-testa"
+  }, React.createElement("h3", {
+    className: "widget-titolo"
+  }, titolo), azione && React.createElement("button", {
+    className: "widget-link",
+    onClick: onAzione
+  }, azione)), children);
+}
+function MiniLavagna({
+  lav
+}) {
+  const el = lav && lav.elementi || [];
+  if (el.length === 0) return React.createElement("p", {
+    className: "widget-vuoto"
+  }, "La lavagna è ancora vuota: aggiungi note, spunti e portieri e uniscili con le frecce.");
+  const largh = e => e.w || LAV_LARGHEZZE[e.tipo] || 200;
+  const alt = e => e.tipo === "spunto" ? 170 : e.tipo === "titolo" ? 44 : e.tipo === "portiere" ? 56 : 110;
+  const minX = Math.min(...el.map(e => e.x)) - 20;
+  const minY = Math.min(...el.map(e => e.y)) - 20;
+  const maxX = Math.max(...el.map(e => e.x + largh(e))) + 20;
+  const maxY = Math.max(...el.map(e => e.y + alt(e))) + 20;
+  const col = {
+    spunto: "#6fb3e0",
+    nota: "#d4af6a",
+    portiere: "#7fd49a",
+    titolo: "#f5f5f7"
+  };
+  const centro = id => {
+    const e = el.find(x => x.id === id);
+    return e ? {
+      x: e.x + largh(e) / 2,
+      y: e.y + alt(e) / 2
+    } : null;
+  };
+  return React.createElement("svg", {
+    className: "mini-lav",
+    viewBox: minX + " " + minY + " " + (maxX - minX) + " " + (maxY - minY),
+    preserveAspectRatio: "xMidYMid meet",
+    role: "img",
+    "aria-label": "Anteprima della lavagna"
+  }, (lav.collegamenti || []).map(c => {
+    const a = centro(c.da),
+      b = centro(c.a);
+    return a && b ? React.createElement("line", {
+      key: c.id,
+      x1: a.x,
+      y1: a.y,
+      x2: b.x,
+      y2: b.y,
+      stroke: "#d4af6a",
+      strokeOpacity: "0.8",
+      strokeWidth: "5"
+    }) : null;
+  }), el.map(e => React.createElement("rect", {
+    key: e.id,
+    x: e.x,
+    y: e.y,
+    width: largh(e),
+    height: e.tipo === "titolo" ? 22 : alt(e),
+    rx: "14",
+    fill: col[e.tipo],
+    fillOpacity: e.tipo === "titolo" ? 0.9 : 0.28,
+    stroke: col[e.tipo],
+    strokeWidth: "4"
+  })));
+}
+function Home({
+  spunti,
+  portieri,
+  selezioni,
+  lavagne,
+  lavagnaCorrente,
+  onVai,
+  onArea,
+  onApriSpunto,
+  onPreferito,
+  onApriPortiere,
+  onNotaVeloce,
+  onLinkVeloce,
+  onSincronizza,
+  areeDisponibili
+}) {
+  const [testo, setTesto] = useState("");
+  const recenti = spunti.slice().sort((a, b) => (b.creato_il || "").localeCompare(a.creato_il || "")).slice(0, 8);
+  const preferiti = spunti.filter(s => s.preferito).slice(0, 4);
+  const senza = portieri.filter(p => !spunti.some(s => (s.portieri || []).includes(p.id))).sort((a, b) => a.nome.localeCompare(b.nome));
+  const piuSeguiti = portieri.map(p => ({
+    p,
+    n: spunti.filter(s => (s.portieri || []).includes(p.id)).length
+  })).filter(x => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 3);
+  const nSett = id => spunti.filter(s => s.settore === id).length;
+  const senzaSettore = spunti.filter(s => !s.settore).length;
+  const t = testo.trim();
+  const sembraLink = !!t && !/\s/.test(t) && /^(https?:\/\/)?[^\s.]+\.[^\s.]{2,}/.test(t);
+  const invia = () => {
+    if (!t) return;
+    if (sembraLink) onLinkVeloce(t);else onNotaVeloce(t);
+    setTesto("");
+  };
+  const conta = a => spunti.filter(s => (s.aree || []).includes(a)).length;
+  const lav = lavagnaCorrente;
+  return React.createElement("div", {
+    className: "home"
+  }, React.createElement(Widget, {
+    titolo: "⚡ Al volo",
+    larghezza: "largo"
+  }, React.createElement("div", {
+    className: "riga-nuova"
+  }, React.createElement("input", {
+    className: "campo-in",
+    placeholder: "Incolla un link oppure scrivi un appunto",
+    value: testo,
+    onChange: e => setTesto(e.target.value),
+    onKeyDown: e => {
+      if (e.key === "Enter") invia();
+    }
+  }), React.createElement("button", {
+    className: "btn primario",
+    disabled: !t,
+    onClick: invia
+  }, sembraLink ? "Apri scheda" : "Salva appunto")), React.createElement("p", {
+    className: "widget-nota"
+  }, "Un link apre la scheda già compilata. Un testo diventa subito un appunto, da sistemare dopo.")), React.createElement(Widget, {
+    titolo: "📊 In numeri"
+  }, React.createElement("div", {
+    className: "tessere"
+  }, React.createElement("button", {
+    className: "tessera",
+    onClick: () => onVai({
+      tipo: "tutti"
+    })
+  }, React.createElement("span", {
+    className: "num"
+  }, spunti.length), React.createElement("span", null, "Spunti")), React.createElement("button", {
+    className: "tessera",
+    onClick: () => onVai({
+      tipo: "portieri"
+    })
+  }, React.createElement("span", {
+    className: "num"
+  }, portieri.length), React.createElement("span", null, "Portieri")), React.createElement("button", {
+    className: "tessera",
+    onClick: () => onVai({
+      tipo: "preferiti"
+    })
+  }, React.createElement("span", {
+    className: "num"
+  }, spunti.filter(s => s.preferito).length), React.createElement("span", null, "Preferiti")), React.createElement("button", {
+    className: "tessera",
+    onClick: () => onVai({
+      tipo: "lavagna"
+    })
+  }, React.createElement("span", {
+    className: "num"
+  }, lavagne.length), React.createElement("span", null, lavagne.length === 1 ? "Lavagna" : "Lavagne")))), React.createElement(Widget, {
+    titolo: "🗂 Settori"
+  }, React.createElement("div", {
+    className: "lista-widget"
+  }, SETTORI.map(x => React.createElement("button", {
+    key: x.id,
+    className: "riga-widget",
+    onClick: () => onVai({
+      tipo: "settore",
+      valore: x.id
+    })
+  }, React.createElement("span", null, x.icona, " ", x.nome), React.createElement("span", {
+    className: "mini"
+  }, nSett(x.id)))), senzaSettore > 0 && React.createElement("button", {
+    className: "riga-widget",
+    onClick: () => onVai({
+      tipo: "tutti"
+    })
+  }, React.createElement("span", null, "📥 Da sistemare (senza settore)"), React.createElement("span", {
+    className: "mini oro"
+  }, senzaSettore)))), React.createElement(Widget, {
+    titolo: "🧠 " + (lav ? lav.nome : "Lavagna"),
+    azione: "Apri →",
+    onAzione: () => onVai({
+      tipo: "lavagna"
+    }),
+    larghezza: "largo"
+  }, lav ? React.createElement(React.Fragment, null, React.createElement("button", {
+    className: "mini-lav-box",
+    onClick: () => onVai({
+      tipo: "lavagna"
+    }),
+    "aria-label": "Apri la lavagna"
+  }, React.createElement(MiniLavagna, {
+    lav: lav
+  })), React.createElement("p", {
+    className: "widget-nota"
+  }, (lav.elementi || []).length, " elementi · ", (lav.collegamenti || []).length, " collegamenti")) : React.createElement("p", {
+    className: "widget-vuoto"
+  }, "Preparo la lavagna…")), React.createElement(Widget, {
+    titolo: "🕒 Ultimi spunti",
+    azione: "Vedi tutti →",
+    onAzione: () => onVai({
+      tipo: "tutti"
+    }),
+    larghezza: "largo"
+  }, recenti.length === 0 ? React.createElement("p", {
+    className: "widget-vuoto"
+  }, "Ancora nessuno spunto. Incolla un link qui sopra per iniziare.") : React.createElement("div", {
+    className: "striscia"
+  }, recenti.map(s => React.createElement("button", {
+    key: s.id,
+    className: "mini-spunto",
+    onClick: () => onApriSpunto(s.id)
+  }, s.anteprima ? React.createElement("span", {
+    className: "mini-spunto-img"
+  }, React.createElement(Img, {
+    src: s.anteprima,
+    alt: ""
+  })) : React.createElement("span", {
+    className: "mini-spunto-img vuoto"
+  }, iconaTipo(s)), React.createElement("span", {
+    className: "mini-spunto-titolo"
+  }, s.titolo || "Senza titolo"))))), React.createElement(Widget, {
+    titolo: "🧤 Portieri senza spunti" + (portieri.length ? " (" + senza.length + ")" : ""),
+    azione: "Tutti →",
+    onAzione: () => onVai({
+      tipo: "portieri"
+    })
+  }, portieri.length === 0 ? React.createElement(React.Fragment, null, React.createElement("p", {
+    className: "widget-vuoto"
+  }, "Non hai ancora portieri qui."), React.createElement("button", {
+    className: "btn piccolo primario",
+    onClick: onSincronizza
+  }, "⟳ Porta i nomi dal gestionale")) : senza.length === 0 ? React.createElement("p", {
+    className: "widget-vuoto"
+  }, "Ogni portiere ha almeno uno spunto collegato. 👏") : React.createElement("div", {
+    className: "chips fitto"
+  }, senza.slice(0, 8).map(p => React.createElement("button", {
+    key: p.id,
+    className: "chip",
+    onClick: () => onApriPortiere(p.id)
+  }, p.nome)), senza.length > 8 && React.createElement("span", {
+    className: "widget-nota"
+  }, "e altri ", senza.length - 8)), piuSeguiti.length > 0 && React.createElement("p", {
+    className: "widget-nota"
+  }, "Più seguiti: ", piuSeguiti.map(x => x.p.nome + " (" + x.n + ")").join(" · "))), React.createElement(Widget, {
+    titolo: "🎯 Aree di lavoro"
+  }, React.createElement("div", {
+    className: "chips fitto"
+  }, areeDisponibili.map(a => React.createElement("button", {
+    key: a,
+    className: "chip",
+    onClick: () => onArea(a)
+  }, a, " (", conta(a), ")")))), React.createElement(Widget, {
+    titolo: "★ Preferiti",
+    azione: "Tutti →",
+    onAzione: () => onVai({
+      tipo: "preferiti"
+    })
+  }, preferiti.length === 0 ? React.createElement("p", {
+    className: "widget-vuoto"
+  }, "Tocca la stella su uno spunto per tenerlo qui a portata di mano.") : React.createElement("div", {
+    className: "lista-widget"
+  }, preferiti.map(s => React.createElement("button", {
+    key: s.id,
+    className: "riga-widget",
+    onClick: () => onApriSpunto(s.id)
+  }, React.createElement("span", {
+    className: "riga-titolo"
+  }, s.titolo || "Senza titolo"), React.createElement("span", {
+    className: "stella on"
+  }, "★"))))), React.createElement(Widget, {
+    titolo: "📂 Selezioni",
+    azione: "Tutte →",
+    onAzione: () => onVai({
+      tipo: "selezioni"
+    })
+  }, selezioni.length === 0 ? React.createElement("p", {
+    className: "widget-vuoto"
+  }, "Le selezioni sono raccolte di spunti per un lavoro preciso, per esempio una sessione sulle uscite alte.") : React.createElement("div", {
+    className: "lista-widget"
+  }, selezioni.slice().sort((a, b) => (b.modificato_il || "").localeCompare(a.modificato_il || "")).slice(0, 4).map(x => React.createElement("button", {
+    key: x.id,
+    className: "riga-widget",
+    onClick: () => onVai({
+      tipo: "selezione",
+      id: x.id
+    })
+  }, React.createElement("span", {
+    className: "riga-titolo"
+  }, "📂 ", x.nome), React.createElement("span", {
+    className: "mini"
+  }, (x.spunti || []).length))))));
+}
 function Img({
   src,
   alt
@@ -3130,7 +3454,7 @@ function App() {
   });
   const [erroreCaricamento, setErroreCaricamento] = useState("");
   const [vista, setVista] = useState({
-    tipo: "lavagna"
+    tipo: "home"
   });
   const [ricerca, setRicerca] = useState("");
   const [fonteFiltro, setFonteFiltro] = useState("");
@@ -3481,6 +3805,27 @@ function App() {
     };
     r.readAsText(file);
   };
+  const creaNotaVeloce = testo => {
+    const t = testo.trim();
+    if (!t) return;
+    salvaSpunto({
+      id: uid(),
+      tipo: "nota",
+      titolo: t.slice(0, 40) + (t.length > 40 ? "…" : ""),
+      url: "",
+      nota: t,
+      fonte: "",
+      aree: [],
+      settore: "",
+      portieri: [],
+      preferito: false,
+      anteprima: null,
+      anteprima_path: null,
+      creato_il: adesso(),
+      modificato_il: adesso()
+    });
+    avvisa("Appunto salvato.");
+  };
   const chiedi = (testo, onSi, etichetta) => setConferma({
     testo,
     onSi,
@@ -3677,7 +4022,7 @@ function App() {
   }, React.createElement("button", {
     className: "logo",
     onClick: () => vai({
-      tipo: "lavagna"
+      tipo: "home"
     })
   }, React.createElement("span", {
     className: "oro-t"
@@ -3696,7 +4041,9 @@ function App() {
     "aria-label": "Impostazioni"
   }, "⚙︎")), React.createElement("nav", {
     className: "chips"
-  }, chip(vista.tipo === "lavagna", "🧠 Lavagna", () => vai({
+  }, chip(vista.tipo === "home", "🏠 Home", () => vai({
+    tipo: "home"
+  }), "home"), chip(vista.tipo === "lavagna", "🧠 Lavagna", () => vai({
     tipo: "lavagna"
   }), "lavagna"), chip(vista.tipo === "portieri" || vista.tipo === "portiere", "🧤 Portieri (" + portieri.length + ")", () => vai({
     tipo: "portieri"
@@ -3726,7 +4073,31 @@ function App() {
     className: "banner"
   }, "Modalità prova: i dati restano su questo dispositivo. Dalle impostazioni ⚙︎ puoi collegare il database online."), avvisoSchema && React.createElement("p", {
     className: "banner"
-  }, "⚠️ ", avvisoSchema), vista.tipo === "lavagna" && !qq && React.createElement(Lavagna, {
+  }, "⚠️ ", avvisoSchema), vista.tipo === "home" && !qq && React.createElement(Home, {
+    spunti: spunti,
+    portieri: portieri,
+    selezioni: selezioni,
+    lavagne: lavagne,
+    lavagnaCorrente: lavagnaCorrente(),
+    areeDisponibili: areeDisponibili,
+    onVai: vai,
+    onArea: a => {
+      vai({
+        tipo: "tutti"
+      });
+      setAreaFiltro(a);
+    },
+    onApriSpunto: setApertoId,
+    onPreferito: preferito,
+    onApriPortiere: apriPortiere,
+    onNotaVeloce: creaNotaVeloce,
+    onLinkVeloce: u => setForm({
+      url: u,
+      settore: "",
+      portieri: []
+    }),
+    onSincronizza: () => setSincronizzaAperta(true)
+  }), vista.tipo === "lavagna" && !qq && React.createElement(Lavagna, {
     lavagne: lavagne,
     lavagnaId: lavagnaId,
     onScegli: scegliLavagna,
@@ -4876,6 +5247,172 @@ function SincronizzaGestionale({ onLista, onChiudi }) {
 }
 
 // ============================================================
+//  GK MIND — home a widget (colpo d'occhio, come nel gestionale)
+// ============================================================
+function Widget({ titolo, azione, onAzione, larghezza, children }) {
+  return (
+    <section className={"widget" + (larghezza ? " " + larghezza : "")}>
+      <div className="widget-testa">
+        <h3 className="widget-titolo">{titolo}</h3>
+        {azione && <button className="widget-link" onClick={onAzione}>{azione}</button>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function MiniLavagna({ lav }) {
+  const el = (lav && lav.elementi) || [];
+  if (el.length === 0) return <p className="widget-vuoto">La lavagna è ancora vuota: aggiungi note, spunti e portieri e uniscili con le frecce.</p>;
+  const largh = (e) => e.w || LAV_LARGHEZZE[e.tipo] || 200;
+  const alt = (e) => (e.tipo === "spunto" ? 170 : e.tipo === "titolo" ? 44 : e.tipo === "portiere" ? 56 : 110);
+  const minX = Math.min(...el.map((e) => e.x)) - 20;
+  const minY = Math.min(...el.map((e) => e.y)) - 20;
+  const maxX = Math.max(...el.map((e) => e.x + largh(e))) + 20;
+  const maxY = Math.max(...el.map((e) => e.y + alt(e))) + 20;
+  const col = { spunto: "#6fb3e0", nota: "#d4af6a", portiere: "#7fd49a", titolo: "#f5f5f7" };
+  const centro = (id) => { const e = el.find((x) => x.id === id); return e ? { x: e.x + largh(e) / 2, y: e.y + alt(e) / 2 } : null; };
+  return (
+    <svg className="mini-lav" viewBox={minX + " " + minY + " " + (maxX - minX) + " " + (maxY - minY)} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Anteprima della lavagna">
+      {(lav.collegamenti || []).map((c) => {
+        const a = centro(c.da), b = centro(c.a);
+        return a && b ? <line key={c.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#d4af6a" strokeOpacity="0.8" strokeWidth="5" /> : null;
+      })}
+      {el.map((e) => (
+        <rect key={e.id} x={e.x} y={e.y} width={largh(e)} height={e.tipo === "titolo" ? 22 : alt(e)} rx="14" fill={col[e.tipo]} fillOpacity={e.tipo === "titolo" ? 0.9 : 0.28} stroke={col[e.tipo]} strokeWidth="4" />
+      ))}
+    </svg>
+  );
+}
+
+function Home({ spunti, portieri, selezioni, lavagne, lavagnaCorrente, onVai, onArea, onApriSpunto, onPreferito, onApriPortiere, onNotaVeloce, onLinkVeloce, onSincronizza, areeDisponibili }) {
+  const [testo, setTesto] = useState("");
+  const recenti = spunti.slice().sort((a, b) => (b.creato_il || "").localeCompare(a.creato_il || "")).slice(0, 8);
+  const preferiti = spunti.filter((s) => s.preferito).slice(0, 4);
+  const senza = portieri.filter((p) => !spunti.some((s) => (s.portieri || []).includes(p.id))).sort((a, b) => a.nome.localeCompare(b.nome));
+  const piuSeguiti = portieri.map((p) => ({ p, n: spunti.filter((s) => (s.portieri || []).includes(p.id)).length })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 3);
+  const nSett = (id) => spunti.filter((s) => s.settore === id).length;
+  const senzaSettore = spunti.filter((s) => !s.settore).length;
+  const t = testo.trim();
+  const sembraLink = !!t && !/\s/.test(t) && /^(https?:\/\/)?[^\s.]+\.[^\s.]{2,}/.test(t);
+  const invia = () => {
+    if (!t) return;
+    if (sembraLink) onLinkVeloce(t); else onNotaVeloce(t);
+    setTesto("");
+  };
+  const conta = (a) => spunti.filter((s) => (s.aree || []).includes(a)).length;
+  const lav = lavagnaCorrente;
+  return (
+    <div className="home">
+      <Widget titolo="⚡ Al volo" larghezza="largo">
+        <div className="riga-nuova">
+          <input className="campo-in" placeholder="Incolla un link oppure scrivi un appunto" value={testo} onChange={(e) => setTesto(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") invia(); }} />
+          <button className="btn primario" disabled={!t} onClick={invia}>{sembraLink ? "Apri scheda" : "Salva appunto"}</button>
+        </div>
+        <p className="widget-nota">Un link apre la scheda già compilata. Un testo diventa subito un appunto, da sistemare dopo.</p>
+      </Widget>
+
+      <Widget titolo="📊 In numeri">
+        <div className="tessere">
+          <button className="tessera" onClick={() => onVai({ tipo: "tutti" })}><span className="num">{spunti.length}</span><span>Spunti</span></button>
+          <button className="tessera" onClick={() => onVai({ tipo: "portieri" })}><span className="num">{portieri.length}</span><span>Portieri</span></button>
+          <button className="tessera" onClick={() => onVai({ tipo: "preferiti" })}><span className="num">{spunti.filter((s) => s.preferito).length}</span><span>Preferiti</span></button>
+          <button className="tessera" onClick={() => onVai({ tipo: "lavagna" })}><span className="num">{lavagne.length}</span><span>{lavagne.length === 1 ? "Lavagna" : "Lavagne"}</span></button>
+        </div>
+      </Widget>
+
+      <Widget titolo="🗂 Settori">
+        <div className="lista-widget">
+          {SETTORI.map((x) => (
+            <button key={x.id} className="riga-widget" onClick={() => onVai({ tipo: "settore", valore: x.id })}>
+              <span>{x.icona} {x.nome}</span><span className="mini">{nSett(x.id)}</span>
+            </button>
+          ))}
+          {senzaSettore > 0 && (
+            <button className="riga-widget" onClick={() => onVai({ tipo: "tutti" })}>
+              <span>📥 Da sistemare (senza settore)</span><span className="mini oro">{senzaSettore}</span>
+            </button>
+          )}
+        </div>
+      </Widget>
+
+      <Widget titolo={"🧠 " + (lav ? lav.nome : "Lavagna")} azione="Apri →" onAzione={() => onVai({ tipo: "lavagna" })} larghezza="largo">
+        {lav ? (
+          <>
+            <button className="mini-lav-box" onClick={() => onVai({ tipo: "lavagna" })} aria-label="Apri la lavagna"><MiniLavagna lav={lav} /></button>
+            <p className="widget-nota">{(lav.elementi || []).length} elementi · {(lav.collegamenti || []).length} collegamenti</p>
+          </>
+        ) : <p className="widget-vuoto">Preparo la lavagna…</p>}
+      </Widget>
+
+      <Widget titolo="🕒 Ultimi spunti" azione="Vedi tutti →" onAzione={() => onVai({ tipo: "tutti" })} larghezza="largo">
+        {recenti.length === 0 ? (
+          <p className="widget-vuoto">Ancora nessuno spunto. Incolla un link qui sopra per iniziare.</p>
+        ) : (
+          <div className="striscia">
+            {recenti.map((s) => (
+              <button key={s.id} className="mini-spunto" onClick={() => onApriSpunto(s.id)}>
+                {s.anteprima ? <span className="mini-spunto-img"><Img src={s.anteprima} alt="" /></span> : <span className="mini-spunto-img vuoto">{iconaTipo(s)}</span>}
+                <span className="mini-spunto-titolo">{s.titolo || "Senza titolo"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Widget>
+
+      <Widget titolo={"🧤 Portieri senza spunti" + (portieri.length ? " (" + senza.length + ")" : "")} azione="Tutti →" onAzione={() => onVai({ tipo: "portieri" })}>
+        {portieri.length === 0 ? (
+          <>
+            <p className="widget-vuoto">Non hai ancora portieri qui.</p>
+            <button className="btn piccolo primario" onClick={onSincronizza}>⟳ Porta i nomi dal gestionale</button>
+          </>
+        ) : senza.length === 0 ? (
+          <p className="widget-vuoto">Ogni portiere ha almeno uno spunto collegato. 👏</p>
+        ) : (
+          <div className="chips fitto">
+            {senza.slice(0, 8).map((p) => <button key={p.id} className="chip" onClick={() => onApriPortiere(p.id)}>{p.nome}</button>)}
+            {senza.length > 8 && <span className="widget-nota">e altri {senza.length - 8}</span>}
+          </div>
+        )}
+        {piuSeguiti.length > 0 && (
+          <p className="widget-nota">Più seguiti: {piuSeguiti.map((x) => x.p.nome + " (" + x.n + ")").join(" · ")}</p>
+        )}
+      </Widget>
+
+      <Widget titolo="🎯 Aree di lavoro">
+        <div className="chips fitto">
+          {areeDisponibili.map((a) => <button key={a} className="chip" onClick={() => onArea(a)}>{a} ({conta(a)})</button>)}
+        </div>
+      </Widget>
+
+      <Widget titolo="★ Preferiti" azione="Tutti →" onAzione={() => onVai({ tipo: "preferiti" })}>
+        {preferiti.length === 0 ? <p className="widget-vuoto">Tocca la stella su uno spunto per tenerlo qui a portata di mano.</p> : (
+          <div className="lista-widget">
+            {preferiti.map((s) => (
+              <button key={s.id} className="riga-widget" onClick={() => onApriSpunto(s.id)}>
+                <span className="riga-titolo">{s.titolo || "Senza titolo"}</span><span className="stella on">★</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Widget>
+
+      <Widget titolo="📂 Selezioni" azione="Tutte →" onAzione={() => onVai({ tipo: "selezioni" })}>
+        {selezioni.length === 0 ? <p className="widget-vuoto">Le selezioni sono raccolte di spunti per un lavoro preciso, per esempio una sessione sulle uscite alte.</p> : (
+          <div className="lista-widget">
+            {selezioni.slice().sort((a, b) => (b.modificato_il || "").localeCompare(a.modificato_il || "")).slice(0, 4).map((x) => (
+              <button key={x.id} className="riga-widget" onClick={() => onVai({ tipo: "selezione", id: x.id })}>
+                <span className="riga-titolo">📂 {x.nome}</span><span className="mini">{(x.spunti || []).length}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Widget>
+    </div>
+  );
+}
+
+// ============================================================
 //  GK MIND — interfaccia
 // ============================================================
 
@@ -5463,7 +6000,7 @@ function App() {
   const [tabelleMancanti, setTabelleMancanti] = useState([]);
   const [lavagnaId, setLavagnaId] = useState(() => { try { return localStorage.getItem(CHIAVE_LAVAGNA) || ""; } catch (e) { return ""; } });
   const [erroreCaricamento, setErroreCaricamento] = useState("");
-  const [vista, setVista] = useState({ tipo: "lavagna" });
+  const [vista, setVista] = useState({ tipo: "home" });
   const [ricerca, setRicerca] = useState("");
   const [fonteFiltro, setFonteFiltro] = useState("");
   const [areaFiltro, setAreaFiltro] = useState("");
@@ -5692,6 +6229,13 @@ function App() {
     r.readAsText(file);
   };
 
+  const creaNotaVeloce = (testo) => {
+    const t = testo.trim();
+    if (!t) return;
+    salvaSpunto({ id: uid(), tipo: "nota", titolo: t.slice(0, 40) + (t.length > 40 ? "…" : ""), url: "", nota: t, fonte: "", aree: [], settore: "", portieri: [], preferito: false, anteprima: null, anteprima_path: null, creato_il: adesso(), modificato_il: adesso() });
+    avvisa("Appunto salvato.");
+  };
+
   const chiedi = (testo, onSi, etichetta) => setConferma({ testo, onSi, etichetta: etichetta || "Elimina" });
 
   // ---------- salvataggio di sicurezza ----------
@@ -5806,12 +6350,13 @@ function App() {
     <div className="app">
       <header className="testa">
         <div className="testa-riga">
-          <button className="logo" onClick={() => vai({ tipo: "lavagna" })}><span className="oro-t">GK</span> Mind</button>
+          <button className="logo" onClick={() => vai({ tipo: "home" })}><span className="oro-t">GK</span> Mind</button>
           <input className="cerca" type="search" placeholder="🔍 Cerca tra i tuoi spunti" value={ricerca} onChange={(e) => setRicerca(e.target.value)} />
           <button className="btn primario" onClick={apriNuovo}>+ Aggiungi</button>
           <button className="btn icona" onClick={() => setImpostazioniAperte(true)} aria-label="Impostazioni">⚙︎</button>
         </div>
         <nav className="chips">
+          {chip(vista.tipo === "home", "🏠 Home", () => vai({ tipo: "home" }), "home")}
           {chip(vista.tipo === "lavagna", "🧠 Lavagna", () => vai({ tipo: "lavagna" }), "lavagna")}
           {chip(vista.tipo === "portieri" || vista.tipo === "portiere", "🧤 Portieri (" + portieri.length + ")", () => vai({ tipo: "portieri" }), "portieri")}
           {SETTORI.map((x) => chip(vista.tipo === "settore" && vista.valore === x.id, x.icona + " " + x.nome + " (" + nSett(x.id) + ")", () => vai({ tipo: "settore", valore: x.id }), "sett-" + x.id))}
@@ -5838,6 +6383,17 @@ function App() {
       <main className={"corpo" + (vista.tipo === "lavagna" && !qq ? " corpo-lavagna" : "")}>
         {store.modo === "locale" && <p className="banner">Modalità prova: i dati restano su questo dispositivo. Dalle impostazioni ⚙︎ puoi collegare il database online.</p>}
         {avvisoSchema && <p className="banner">⚠️ {avvisoSchema}</p>}
+
+        {vista.tipo === "home" && !qq && (
+          <Home
+            spunti={spunti} portieri={portieri} selezioni={selezioni} lavagne={lavagne} lavagnaCorrente={lavagnaCorrente()}
+            areeDisponibili={areeDisponibili}
+            onVai={vai} onArea={(a) => { vai({ tipo: "tutti" }); setAreaFiltro(a); }}
+            onApriSpunto={setApertoId} onPreferito={preferito} onApriPortiere={apriPortiere}
+            onNotaVeloce={creaNotaVeloce} onLinkVeloce={(u) => setForm({ url: u, settore: "", portieri: [] })}
+            onSincronizza={() => setSincronizzaAperta(true)}
+          />
+        )}
 
         {vista.tipo === "lavagna" && !qq && (
           <Lavagna
