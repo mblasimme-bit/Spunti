@@ -212,6 +212,21 @@ textarea.campo-in { resize: vertical; min-height: 80px; line-height: 1.4; }
 .mini-lav-box { display: block; width: 100%; height: 190px; border: 1px solid var(--bordo); border-radius: 14px; background: rgba(0, 0, 0, 0.35); padding: 8px; cursor: pointer; }
 .mini-lav { width: 100%; height: 100%; display: block; }
 
+.gruppo-etichetta { margin: 10px 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--oro); }
+.aree-pannello { max-width: 1400px; margin: 6px auto 0; max-height: 45vh; overflow: auto; padding: 4px 4px 8px; border: 1px solid var(--bordo); border-radius: 14px; background: rgba(0, 0, 0, 0.45); }
+.aree-pannello .suggerimento { padding: 4px 8px 0; margin: 4px 0 0; }
+.aree-pannello .gruppo-etichetta, .aree-pannello .chips { margin-left: 8px; margin-right: 8px; }
+.filtro-fonte { margin: 8px 0 0; }
+
+/* lettore e condivisione */
+.play.attivo { cursor: pointer; border: none; padding: 0; }
+.play.attivo:hover { background: rgba(212, 175, 106, 0.95); color: #000; }
+.griglia-condividi { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin: 12px 0; }
+.griglia-condividi .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.griglia-condividi .sotto { font-size: 11px; font-weight: 400; opacity: 0.7; }
+.anteprima-export { max-height: 240px; overflow: hidden; border-radius: 10px; background: #fbf8f1; margin-bottom: 8px; display: flex; justify-content: center; }
+.anteprima-export img { max-width: 100%; max-height: 240px; object-fit: contain; }
+
 </style>
 </head>
 <body>
@@ -524,7 +539,7 @@ const {
   useMemo,
   useRef
 } = React;
-const VERSIONE = "GK Mind v2 · 9 ott 2026";
+const VERSIONE = "GK Mind v3 · 10 ott 2026";
 const NOME_APP = "GK Mind";
 const SETTORI = [{
   id: "colleghi",
@@ -545,7 +560,32 @@ const SETTORI = [{
 const GEST_URL = "https://xvevxohwcozcwgrewmnt.supabase.co";
 const GEST_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2ZXZ4b2h3Y296Y3dncmV3bW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzQ3MzEsImV4cCI6MjEwMzM1MDczMX0.akZjZRmt5gRfK4wwZOcEP7k-R34n25oerKU7Kb5MNiU";
 const CHIAVE_GEST_SESSIONE = "gkmind-gestionale-sessione-v1";
-const AREE_BASE = ["Situazionale", "Analitico", "Uscite alte", "Lavoro coi piedi", "Lettura del gioco", "Atletico"];
+const AREE_GRUPPI = [{
+  nome: "Metodologie",
+  aree: ["Gioco ludico", "Analitico", "Globale / situazionale", "Squadra"]
+}, {
+  nome: "Gesti tecnici · fase offensiva",
+  aree: ["Distribuzione con le mani", "Distribuzione con i piedi"]
+}, {
+  nome: "Gesti tecnici · fase difensiva",
+  aree: ["Presa", "Tuffo", "Deviazione", "Uscita alta", "Uscita bassa", "Gestione 1vs1"]
+}, {
+  nome: "Atletico in funzione del gesto tecnico",
+  aree: ["Atletico"]
+}];
+const AREE_BASE = AREE_GRUPPI.reduce((tot, g) => tot.concat(g.aree), []);
+const AREE_RINOMINATE = {
+  "Situazionale": "Globale / situazionale",
+  "Uscite alte": "Uscita alta",
+  "Lavoro coi piedi": "Distribuzione con i piedi"
+};
+function gruppiAree(disponibili) {
+  const extra = disponibili.filter(a => !AREE_BASE.includes(a));
+  return extra.length ? AREE_GRUPPI.concat([{
+    nome: "Altre aree",
+    aree: extra
+  }]) : AREE_GRUPPI;
+}
 function uid() {
   if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -630,6 +670,13 @@ function analizzaLink(url) {
     host
   };
 }
+function embedAutoplay(info) {
+  if (!info || !info.embed) return "";
+  if (info.piattaforma === "youtube") return info.embed + "&autoplay=1&playsinline=1";
+  if (info.piattaforma === "vimeo") return info.embed + "?autoplay=1";
+  return info.embed;
+}
+const ContestoGuarda = React.createContext(null);
 function tipoDaLink(info) {
   if (!info) return "nota";
   return ["youtube", "vimeo", "instagram", "tiktok"].includes(info.piattaforma) ? "video" : "link";
@@ -1124,6 +1171,921 @@ function creaStoreCloud(cfg) {
     }
   };
 }
+const PDF_LARGH_HELV = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
+const PDF_WIN = {
+  0x20AC: 0x80,
+  0x201A: 0x82,
+  0x0192: 0x83,
+  0x201E: 0x84,
+  0x2026: 0x85,
+  0x2020: 0x86,
+  0x2021: 0x87,
+  0x02C6: 0x88,
+  0x2030: 0x89,
+  0x0160: 0x8A,
+  0x2039: 0x8B,
+  0x0152: 0x8C,
+  0x017D: 0x8E,
+  0x2018: 0x91,
+  0x2019: 0x92,
+  0x201C: 0x93,
+  0x201D: 0x94,
+  0x2022: 0x95,
+  0x2013: 0x96,
+  0x2014: 0x97,
+  0x02DC: 0x98,
+  0x2122: 0x99,
+  0x0161: 0x9A,
+  0x203A: 0x9B,
+  0x0153: 0x9C,
+  0x017E: 0x9E,
+  0x0178: 0x9F
+};
+function pdfPulisci(t) {
+  return String(t == null ? "" : t).replace(/→/g, "->").replace(/←/g, "<-").replace(/★/g, "*").replace(/☆/g, "*").replace(/✓/g, "ok").replace(/…/g, "...").replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200B}-\u{200F}]/gu, "").replace(/\t/g, " ").replace(/\r/g, "").split("").map(ch => {
+    const c = ch.charCodeAt(0);
+    if (c === 10) return "\n";
+    if (c >= 32 && c <= 126 || c >= 160 && c <= 255 || PDF_WIN[c]) return ch;
+    return "";
+  }).join("");
+}
+function pdfByte(ch) {
+  const c = ch.charCodeAt(0);
+  return PDF_WIN[c] || c;
+}
+function pdfLarghezza(testo, size, grassetto) {
+  let w = 0;
+  for (let i = 0; i < testo.length; i++) {
+    const c = testo.charCodeAt(i);
+    w += c >= 32 && c <= 126 ? PDF_LARGH_HELV[c - 32] : 556;
+  }
+  return w * size * (grassetto ? 1.07 : 1) / 1000;
+}
+function pdfSpezza(testo, size, grassetto, maxW) {
+  const righe = [];
+  String(testo).split("\n").forEach(par => {
+    if (par === "") {
+      righe.push("");
+      return;
+    }
+    let corrente = "";
+    par.split(" ").forEach(parola => {
+      let p = parola;
+      while (pdfLarghezza(p, size, grassetto) > maxW) {
+        let n = p.length;
+        while (n > 1 && pdfLarghezza(p.slice(0, n), size, grassetto) > maxW) n--;
+        if (corrente) {
+          righe.push(corrente);
+          corrente = "";
+        }
+        righe.push(p.slice(0, n));
+        p = p.slice(n);
+      }
+      const prova = corrente ? corrente + " " + p : p;
+      if (corrente && pdfLarghezza(prova, size, grassetto) > maxW) {
+        righe.push(corrente);
+        corrente = p;
+      } else corrente = prova;
+    });
+    righe.push(corrente);
+  });
+  return righe;
+}
+function pdfLit(testo) {
+  let s = "(";
+  for (let i = 0; i < testo.length; i++) {
+    const ch = testo[i];
+    const b = pdfByte(ch);
+    if (ch === "(" || ch === ")" || ch === "\\") s += "\\" + ch;else if (b > 126 || b < 32) s += "\\" + ("000" + b.toString(8)).slice(-3);else s += ch;
+  }
+  return s + ")";
+}
+function pdfUrlSicuro(u) {
+  return String(u).replace(/[^\x21-\x7e]/g, c => encodeURIComponent(c)).replace(/[()\\]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+}
+function pdfNum(n) {
+  return (Math.round(n * 100) / 100).toString();
+}
+function creaPdf(doc) {
+  const PW = 595.28,
+    PH = 841.89,
+    M = 42,
+    W = PW - 2 * M;
+  const pagine = [];
+  const immagini = [];
+  let y = 0;
+  const nuovaPagina = () => {
+    pagine.push({
+      ops: [],
+      annots: [],
+      imgs: []
+    });
+    y = PH - M;
+  };
+  const pg = () => pagine[pagine.length - 1];
+  const serve = h => {
+    if (y - h < M + 14) nuovaPagina();
+  };
+  const colore = c => (c || [0.13, 0.13, 0.13]).map(pdfNum).join(" ");
+  const testo = (s, x, yy, size, grassetto, c) => {
+    if (!s) return;
+    pg().ops.push("BT " + colore(c) + " rg /" + (grassetto ? "F2" : "F1") + " " + size + " Tf " + pdfNum(x) + " " + pdfNum(yy) + " Td " + pdfLit(s) + " Tj ET");
+  };
+  const riquadroImmagine = (img, larghezza, maxAlt) => {
+    let w = larghezza,
+      h = img.h / img.w * w;
+    if (h > maxAlt) {
+      h = maxAlt;
+      w = img.w / img.h * h;
+    }
+    serve(h + 6);
+    let idx = immagini.indexOf(img);
+    if (idx < 0) {
+      immagini.push(img);
+      idx = immagini.length - 1;
+    }
+    pg().imgs.indexOf(idx) < 0 && pg().imgs.push(idx);
+    pg().ops.push("q " + pdfNum(w) + " 0 0 " + pdfNum(h) + " " + pdfNum(M) + " " + pdfNum(y - h) + " cm /Im" + idx + " Do Q");
+    y -= h + 8;
+  };
+  const paragrafo = (s, size, grassetto, c, opz) => {
+    const o = opz || {};
+    const rientro = o.rientro || 0;
+    const interlinea = size * 1.32;
+    pdfSpezza(pdfPulisci(s), size, grassetto, W - rientro).forEach(riga => {
+      serve(interlinea);
+      y -= interlinea;
+      testo(riga, M + rientro, y, size, grassetto, c);
+      if (o.url && riga) {
+        const w = pdfLarghezza(riga, size, grassetto);
+        pg().ops.push("0.1 0.3 0.7 RG 0.5 w " + pdfNum(M + rientro) + " " + pdfNum(y - 1.5) + " m " + pdfNum(M + rientro + w) + " " + pdfNum(y - 1.5) + " l S");
+        pg().annots.push({
+          rect: [M + rientro, y - 3, M + rientro + w, y + size],
+          url: o.url
+        });
+      }
+    });
+    y -= o.dopo == null ? 2 : o.dopo;
+  };
+  nuovaPagina();
+  paragrafo(doc.titolo || "GK Mind", 20, true, [0.1, 0.1, 0.1], {
+    dopo: 2
+  });
+  if (doc.sottotitolo) paragrafo(doc.sottotitolo, 10, false, [0.45, 0.45, 0.45], {
+    dopo: 4
+  });
+  pg().ops.push("0.83 0.69 0.42 RG 1.5 w " + pdfNum(M) + " " + pdfNum(y - 2) + " m " + pdfNum(M + W) + " " + pdfNum(y - 2) + " l S");
+  y -= 12;
+  if (doc.nota) paragrafo(doc.nota, 10.5, false, [0.2, 0.2, 0.2], {
+    dopo: 8
+  });
+  if (doc.immagine) {
+    riquadroImmagine(doc.immagine, W, 560);
+  }
+  if (doc.voci && doc.voci.length) {
+    serve(40);
+    paragrafo(doc.sezioneVoci || "Elementi", 13, true, [0.55, 0.42, 0.15], {
+      dopo: 6
+    });
+    doc.voci.forEach(v => {
+      serve(52);
+      paragrafo((v.n ? v.n + ". " : "") + (v.titolo || ""), 11.5, true, [0.1, 0.1, 0.1], {
+        dopo: 1
+      });
+      const meta = [v.tipoEtichetta].concat(v.meta || []).filter(Boolean).join("  ·  ");
+      if (meta) paragrafo(meta, 8.5, false, [0.5, 0.5, 0.5], {
+        dopo: 1,
+        rientro: 12
+      });
+      if (v.url) paragrafo(v.url, 8.5, false, [0.1, 0.3, 0.7], {
+        dopo: 2,
+        rientro: 12,
+        url: v.url
+      });
+      if (v.immagine) {
+        const o = y;
+        riquadroImmagine({
+          jpeg: v.immagine.jpeg,
+          w: v.immagine.w,
+          h: v.immagine.h
+        }, 150, 90);
+        if (o === y) y -= 0;
+      }
+      if (v.nota) paragrafo(v.nota, 10, false, [0.2, 0.2, 0.2], {
+        dopo: 2,
+        rientro: 12
+      });
+      y -= 7;
+    });
+  }
+  if (doc.collegamenti && doc.collegamenti.length) {
+    serve(40);
+    paragrafo("Collegamenti", 13, true, [0.55, 0.42, 0.15], {
+      dopo: 6
+    });
+    doc.collegamenti.forEach(c => paragrafo("-  " + c.testo, 10, false, [0.2, 0.2, 0.2], {
+      dopo: 2,
+      rientro: 6
+    }));
+  }
+  pagine.forEach((p, i) => {
+    p.ops.push("BT 0.55 0.55 0.55 rg /F1 8 Tf " + pdfNum(M) + " 24 Td " + pdfLit(pdfPulisci(doc.piede || "GK Mind")) + " Tj ET");
+    const num = i + 1 + " / " + pagine.length;
+    p.ops.push("BT 0.55 0.55 0.55 rg /F1 8 Tf " + pdfNum(PW - M - pdfLarghezza(num, 8, false)) + " 24 Td " + pdfLit(num) + " Tj ET");
+  });
+  const pezzi = [];
+  let lunghezza = 0;
+  const offsets = [];
+  const bytes = s => {
+    const a = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255;
+    return a;
+  };
+  const scrivi = dati => {
+    const a = typeof dati === "string" ? bytes(dati) : dati;
+    pezzi.push(a);
+    lunghezza += a.length;
+  };
+  const oggetti = [];
+  const reserva = () => {
+    oggetti.push(null);
+    return oggetti.length;
+  };
+  const imposta = (n, contenuto) => {
+    oggetti[n - 1] = contenuto;
+  };
+  const catalogo = reserva(),
+    pagineOgg = reserva(),
+    f1 = reserva(),
+    f2 = reserva();
+  const imgNum = immagini.map(() => reserva());
+  immagini.forEach((im, i) => {
+    imposta(imgNum[i], {
+      testa: "<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.jpeg.length + " >>",
+      flusso: im.jpeg
+    });
+  });
+  const pagNum = [];
+  pagine.forEach(p => {
+    const contenuto = reserva();
+    const pag = reserva();
+    pagNum.push(pag);
+    const annotNum = p.annots.map(a => {
+      const n = reserva();
+      imposta(n, {
+        testa: "<< /Type /Annot /Subtype /Link /Rect [" + a.rect.map(pdfNum).join(" ") + "] /Border [0 0 0] /A << /S /URI /URI (" + pdfUrlSicuro(a.url) + ") >> >>"
+      });
+      return n;
+    });
+    const flusso = bytes(p.ops.join("\n"));
+    imposta(contenuto, {
+      testa: "<< /Length " + flusso.length + " >>",
+      flusso
+    });
+    const xo = p.imgs.length ? " /XObject << " + p.imgs.map(i => "/Im" + i + " " + imgNum[i] + " 0 R").join(" ") + " >>" : "";
+    imposta(pag, {
+      testa: "<< /Type /Page /Parent " + pagineOgg + " 0 R /MediaBox [0 0 " + pdfNum(PW) + " " + pdfNum(PH) + "] /Resources << /Font << /F1 " + f1 + " 0 R /F2 " + f2 + " 0 R >>" + xo + " >> /Contents " + contenuto + " 0 R" + (annotNum.length ? " /Annots [" + annotNum.map(n => n + " 0 R").join(" ") + "]" : "") + " >>"
+    });
+  });
+  imposta(catalogo, {
+    testa: "<< /Type /Catalog /Pages " + pagineOgg + " 0 R >>"
+  });
+  imposta(pagineOgg, {
+    testa: "<< /Type /Pages /Kids [" + pagNum.map(n => n + " 0 R").join(" ") + "] /Count " + pagNum.length + " >>"
+  });
+  imposta(f1, {
+    testa: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+  });
+  imposta(f2, {
+    testa: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"
+  });
+  scrivi("%PDF-1.4\n%âãÏÓ\n");
+  oggetti.forEach((o, i) => {
+    offsets[i] = lunghezza;
+    scrivi(i + 1 + " 0 obj\n" + o.testa + "\n");
+    if (o.flusso) {
+      scrivi("stream\n");
+      scrivi(o.flusso);
+      scrivi("\nendstream\n");
+    }
+    scrivi("endobj\n");
+  });
+  const xref = lunghezza;
+  let tab = "xref\n0 " + (oggetti.length + 1) + "\n0000000000 65535 f \n";
+  offsets.forEach(o => {
+    tab += ("0000000000" + o).slice(-10) + " 00000 n \n";
+  });
+  scrivi(tab + "trailer\n<< /Size " + (oggetti.length + 1) + " /Root " + catalogo + " 0 R /Info << /Title " + pdfLit(pdfPulisci(doc.titolo || "GK Mind")) + " /Producer (GK Mind) >> >>\nstartxref\n" + xref + "\n%%EOF\n");
+  const fuori = new Uint8Array(lunghezza);
+  let pos = 0;
+  pezzi.forEach(a => {
+    fuori.set(a, pos);
+    pos += a.length;
+  });
+  return fuori;
+}
+function vocePerSpunto(s, portieri, n) {
+  const info = analizzaLink(s.url);
+  const sett = settoreDi(s.settore);
+  const nomiP = (s.portieri || []).map(id => (portieri.find(p => p.id === id) || {}).nome).filter(Boolean);
+  const meta = [s.fonte, sett ? sett.nome : "", (s.aree || []).join(", "), nomiP.length ? "Portieri: " + nomiP.join(", ") : ""].filter(Boolean);
+  return {
+    n,
+    tipoEtichetta: info && info.nome && info.piattaforma !== "web" ? info.nome : s.tipo === "immagine" ? "Immagine" : s.tipo === "nota" ? "Appunto" : s.tipo === "link" ? "Link" : "Video",
+    titolo: s.titolo || "Senza titolo",
+    meta,
+    url: s.url || "",
+    nota: s.nota || "",
+    anteprima: s.anteprima || ""
+  };
+}
+function dataOggi() {
+  try {
+    return new Date().toLocaleDateString("it-IT", {
+      day: "numeric",
+      month: "long",
+      year: "numeric"
+    });
+  } catch (e) {
+    return "";
+  }
+}
+function docSpunto(s, portieri) {
+  const v = vocePerSpunto(s, portieri, 0);
+  return {
+    titolo: s.titolo || "Spunto",
+    sottotitolo: "GK Mind · " + dataOggi(),
+    nota: "",
+    voci: [{
+      ...v,
+      n: 0
+    }],
+    sezioneVoci: "Spunto",
+    collegamenti: [],
+    piede: "GK Mind · " + (s.titolo || "Spunto"),
+    nomeFile: s.titolo || "spunto"
+  };
+}
+function docSelezione(sel, spunti, portieri) {
+  const dentro = (sel.spunti || []).map(id => spunti.find(s => s.id === id)).filter(Boolean);
+  return {
+    titolo: sel.nome,
+    sottotitolo: "Selezione · " + dentro.length + (dentro.length === 1 ? " spunto" : " spunti") + " · " + dataOggi(),
+    nota: sel.nota || "",
+    voci: dentro.map((s, i) => vocePerSpunto(s, portieri, i + 1)),
+    sezioneVoci: "Spunti",
+    collegamenti: [],
+    piede: "GK Mind · " + sel.nome,
+    nomeFile: sel.nome
+  };
+}
+function docPortiere(p, spuntiDi, portieri) {
+  return {
+    titolo: p.nome,
+    sottotitolo: [p.anno ? "Annata " + p.anno : "", p.squadra, spuntiDi.length + (spuntiDi.length === 1 ? " spunto" : " spunti"), dataOggi()].filter(Boolean).join(" · "),
+    nota: p.note ? "Appunti: " + p.note : "",
+    voci: spuntiDi.map((s, i) => vocePerSpunto(s, portieri, i + 1)),
+    sezioneVoci: "Spunti collegati",
+    collegamenti: [],
+    piede: "GK Mind · " + p.nome,
+    nomeFile: p.nome
+  };
+}
+function nomeElemento(e, spunti, portieri) {
+  if (e.tipo === "spunto") {
+    const s = spunti.find(x => x.id === e.rif);
+    return s ? s.titolo || "Senza titolo" : "Spunto eliminato";
+  }
+  if (e.tipo === "portiere") {
+    const p = portieri.find(x => x.id === e.rif);
+    return p ? p.nome : "Portiere eliminato";
+  }
+  return (e.testo || "").trim().replace(/\s+/g, " ").slice(0, 60) || (e.tipo === "titolo" ? "Titolo" : "Nota");
+}
+function docLavagna(lav, spunti, portieri) {
+  const el = (lav.elementi || []).slice().sort((a, b) => Math.round(a.y / 120) - Math.round(b.y / 120) || a.x - b.x);
+  const spuntiEl = el.filter(e => e.tipo === "spunto").map(e => spunti.find(s => s.id === e.rif)).filter(Boolean);
+  const titoli = el.filter(e => e.tipo === "titolo" && (e.testo || "").trim()).map(e => e.testo.trim());
+  const note = el.filter(e => e.tipo === "nota" && (e.testo || "").trim()).map(e => "• " + e.testo.trim().replace(/\n+/g, " "));
+  const port = el.filter(e => e.tipo === "portiere").map(e => (portieri.find(p => p.id === e.rif) || {}).nome).filter(Boolean);
+  const righe = [];
+  if (titoli.length) righe.push("Titoli: " + titoli.join(" / "));
+  if (port.length) righe.push("Portieri: " + port.join(", "));
+  if (note.length) {
+    righe.push("");
+    righe.push("Note:");
+    note.forEach(n => righe.push(n));
+  }
+  const colleg = (lav.collegamenti || []).map(c => {
+    const a = el.find(e => e.id === c.da),
+      b = el.find(e => e.id === c.a);
+    if (!a || !b) return null;
+    return {
+      testo: nomeElemento(a, spunti, portieri) + " → " + nomeElemento(b, spunti, portieri) + (c.etichetta ? "  (" + c.etichetta + ")" : "")
+    };
+  }).filter(Boolean);
+  return {
+    titolo: lav.nome || "Lavagna",
+    sottotitolo: "Lavagna · " + el.length + " elementi · " + dataOggi(),
+    nota: righe.join("\n"),
+    voci: spuntiEl.map((s, i) => vocePerSpunto(s, portieri, i + 1)),
+    sezioneVoci: "Spunti sulla lavagna",
+    collegamenti: colleg,
+    piede: "GK Mind · " + (lav.nome || "Lavagna"),
+    nomeFile: lav.nome || "lavagna",
+    conImmagine: el.length > 0
+  };
+}
+function documentoATesto(doc, perWhatsApp) {
+  const b = t => perWhatsApp ? "*" + t + "*" : t;
+  const r = [b(doc.titolo)];
+  if (doc.sottotitolo) r.push(doc.sottotitolo);
+  if (doc.nota) {
+    r.push("");
+    r.push(doc.nota);
+  }
+  if (doc.voci && doc.voci.length) {
+    r.push("");
+    r.push(b(doc.sezioneVoci || "Elementi"));
+    doc.voci.forEach(v => {
+      r.push("");
+      r.push((v.n ? v.n + ". " : "") + v.titolo);
+      const meta = [v.tipoEtichetta].concat(v.meta || []).filter(Boolean).join(" · ");
+      if (meta) r.push(meta);
+      if (v.url) r.push(v.url);
+      if (v.nota) r.push(v.nota);
+    });
+  }
+  if (doc.collegamenti && doc.collegamenti.length) {
+    r.push("");
+    r.push(b("Collegamenti"));
+    doc.collegamenti.forEach(c => r.push("- " + c.testo));
+  }
+  r.push("");
+  r.push("— GK Mind");
+  return r.join("\n");
+}
+function nomeFileSicuro(t, estensione) {
+  const base = String(t || "gk-mind").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "gk-mind";
+  return "gk-mind-" + base + "." + estensione;
+}
+function dataUrlAJpeg(dataUrl) {
+  const bin = atob(String(dataUrl).split(",")[1] || "");
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+function jpegDaUrl(url, maxLato) {
+  return new Promise(resolve => {
+    if (!url) {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    let finito = false;
+    const fine = v => {
+      if (!finito) {
+        finito = true;
+        resolve(v);
+      }
+    };
+    const t = setTimeout(() => fine(null), 4000);
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      clearTimeout(t);
+      try {
+        const w0 = img.naturalWidth,
+          h0 = img.naturalHeight;
+        if (!w0 || !h0) {
+          fine(null);
+          return;
+        }
+        const sc = Math.min(1, maxLato / Math.max(w0, h0));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w0 * sc));
+        c.height = Math.max(1, Math.round(h0 * sc));
+        const g = c.getContext("2d");
+        g.fillStyle = "#ffffff";
+        g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        fine({
+          jpeg: dataUrlAJpeg(c.toDataURL("image/jpeg", 0.8)),
+          w: c.width,
+          h: c.height,
+          img
+        });
+      } catch (e) {
+        fine(null);
+      }
+    };
+    img.onerror = () => {
+      clearTimeout(t);
+      fine(null);
+    };
+    img.src = url;
+  });
+}
+function rettangoloArrotondato(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y);
+  g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r);
+  g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h);
+  g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r);
+  g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+function righeCanvas(g, testo, maxW, maxRighe) {
+  const righe = [];
+  String(testo || "").split("\n").forEach(par => {
+    let corr = "";
+    par.split(" ").forEach(p => {
+      const prova = corr ? corr + " " + p : p;
+      if (corr && g.measureText(prova).width > maxW) {
+        righe.push(corr);
+        corr = p;
+      } else corr = prova;
+    });
+    righe.push(corr);
+  });
+  if (righe.length > maxRighe) {
+    const r = righe.slice(0, maxRighe);
+    r[maxRighe - 1] = r[maxRighe - 1].replace(/.{0,2}$/, "") + "…";
+    return r;
+  }
+  return righe;
+}
+const COLORI_LAV_EXP = ["#d4af6a", "#6fb3e0", "#7fd49a", "#e08a8a", "#b99be0", "#e0c36f"];
+async function disegnaLavagna(lav, spunti, portieri, misure) {
+  const el = lav.elementi || [];
+  if (!el.length) return null;
+  const larg = e => e.w || LAV_LARGHEZZE[e.tipo] || 200;
+  const alt = e => misure && misure[e.id] || (e.tipo === "spunto" ? 170 : e.tipo === "titolo" ? 44 : e.tipo === "portiere" ? 56 : 110);
+  const P = 40;
+  const minX = Math.min(...el.map(e => e.x)) - P,
+    minY = Math.min(...el.map(e => e.y)) - P;
+  const maxX = Math.max(...el.map(e => e.x + larg(e))) + P,
+    maxY = Math.max(...el.map(e => e.y + alt(e))) + P;
+  const W = maxX - minX,
+    H = maxY - minY;
+  const sc = Math.min(2, 2400 / Math.max(W, H));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(W * sc));
+  c.height = Math.max(1, Math.round(H * sc));
+  const g = c.getContext("2d");
+  g.scale(sc, sc);
+  g.translate(-minX, -minY);
+  g.fillStyle = "#fbf8f1";
+  g.fillRect(minX, minY, W, H);
+  const miniature = {};
+  await Promise.all(el.filter(e => e.tipo === "spunto").map(async e => {
+    const s = spunti.find(x => x.id === e.rif);
+    if (s && s.anteprima) miniature[e.id] = await jpegDaUrl(s.anteprima, 360);
+  }));
+  const rett = e => ({
+    x: e.x,
+    y: e.y,
+    w: larg(e),
+    h: alt(e)
+  });
+  const etichette = [];
+  (lav.collegamenti || []).forEach(l => {
+    const a = el.find(e => e.id === l.da),
+      b = el.find(e => e.id === l.a);
+    if (!a || !b) return;
+    const ra = rett(a),
+      rb = rett(b);
+    const ca = {
+        x: ra.x + ra.w / 2,
+        y: ra.y + ra.h / 2
+      },
+      cb = {
+        x: rb.x + rb.w / 2,
+        y: rb.y + rb.h / 2
+      };
+    const clip = (r, da, verso) => {
+      const dx = verso.x - da.x,
+        dy = verso.y - da.y;
+      const tx = dx ? r.w / 2 / Math.abs(dx) : Infinity,
+        ty = dy ? r.h / 2 / Math.abs(dy) : Infinity;
+      const t = Math.min(tx, ty) + 0.01;
+      return {
+        x: da.x + dx * t,
+        y: da.y + dy * t
+      };
+    };
+    const p1 = clip(ra, ca, cb),
+      p2 = clip(rb, cb, ca);
+    g.strokeStyle = "#a8822f";
+    g.fillStyle = "#a8822f";
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(p1.x, p1.y);
+    g.lineTo(p2.x, p2.y);
+    g.stroke();
+    const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    g.beginPath();
+    g.moveTo(p2.x, p2.y);
+    g.lineTo(p2.x - 16 * Math.cos(ang - 0.4), p2.y - 16 * Math.sin(ang - 0.4));
+    g.lineTo(p2.x - 16 * Math.cos(ang + 0.4), p2.y - 16 * Math.sin(ang + 0.4));
+    g.closePath();
+    g.fill();
+    if (l.etichetta) etichette.push({
+      l,
+      p1,
+      p2
+    });
+  });
+  el.forEach(e => {
+    const r = rett(e);
+    g.save();
+    if (e.tipo === "titolo") {
+      g.fillStyle = "#1a1a1a";
+      g.font = "700 26px Helvetica, Arial, sans-serif";
+      g.textBaseline = "top";
+      righeCanvas(g, e.testo || "Titolo", r.w, 2).forEach((riga, i) => g.fillText(riga, r.x, r.y + 4 + i * 32));
+      g.restore();
+      return;
+    }
+    let colore = "#a8822f",
+      sfondo = "#ffffff";
+    if (e.tipo === "nota") {
+      colore = COLORI_LAV_EXP[(e.colore || 0) % COLORI_LAV_EXP.length];
+      sfondo = "#fffdf7";
+    }
+    if (e.tipo === "spunto") {
+      colore = "#4a90c2";
+    }
+    if (e.tipo === "portiere") {
+      colore = "#3f9d5f";
+      sfondo = "#f2fbf5";
+    }
+    rettangoloArrotondato(g, r.x, r.y, r.w, r.h, 12);
+    g.fillStyle = sfondo;
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = colore;
+    g.stroke();
+    g.beginPath();
+    rettangoloArrotondato(g, r.x, r.y, r.w, r.h, 12);
+    g.clip();
+    g.textBaseline = "top";
+    g.fillStyle = "#222";
+    if (e.tipo === "nota") {
+      g.font = "400 18px Helvetica, Arial, sans-serif";
+      righeCanvas(g, e.testo || "", r.w - 24, Math.max(1, Math.floor((r.h - 20) / 24))).forEach((riga, i) => g.fillText(riga, r.x + 12, r.y + 12 + i * 24));
+    } else if (e.tipo === "portiere") {
+      const p = portieri.find(x => x.id === e.rif);
+      g.font = "700 19px Helvetica, Arial, sans-serif";
+      righeCanvas(g, p ? p.nome : "Portiere eliminato", r.w - 24, 2).forEach((riga, i) => g.fillText(riga, r.x + 12, r.y + 12 + i * 24));
+      if (p && (p.anno || p.squadra) && r.h > 70) {
+        g.font = "400 15px Helvetica, Arial, sans-serif";
+        g.fillStyle = "#666";
+        g.fillText([p.anno, p.squadra].filter(Boolean).join(" · "), r.x + 12, r.y + r.h - 26);
+      }
+    } else if (e.tipo === "spunto") {
+      const s = spunti.find(x => x.id === e.rif);
+      let y = r.y + 10;
+      const m = miniature[e.id];
+      if (m && m.img) {
+        const iw = r.w - 20,
+          ih = Math.min(iw * 0.5625, r.h * 0.55);
+        g.save();
+        rettangoloArrotondato(g, r.x + 10, y, iw, ih, 8);
+        g.clip();
+        const sx = Math.max(iw / m.img.naturalWidth, ih / m.img.naturalHeight);
+        g.drawImage(m.img, r.x + 10 + (iw - m.img.naturalWidth * sx) / 2, y + (ih - m.img.naturalHeight * sx) / 2, m.img.naturalWidth * sx, m.img.naturalHeight * sx);
+        g.restore();
+        y += ih + 8;
+      } else if (s && s.anteprima) {
+        g.fillStyle = "#e9eef3";
+        g.fillRect(r.x + 10, y, r.w - 20, 40);
+        g.fillStyle = "#666";
+        g.font = "600 15px Helvetica, Arial, sans-serif";
+        g.fillText("▶ " + (s.tipo === "video" ? "video" : "immagine"), r.x + 18, y + 12);
+        y += 48;
+      }
+      g.fillStyle = "#222";
+      g.font = "700 17px Helvetica, Arial, sans-serif";
+      righeCanvas(g, s ? s.titolo || "Senza titolo" : "Spunto eliminato", r.w - 20, Math.max(1, Math.floor((r.y + r.h - y - 8) / 22))).forEach((riga, i) => g.fillText(riga, r.x + 10, y + i * 22));
+    }
+    g.restore();
+  });
+  etichette.forEach(({
+    l,
+    p1,
+    p2
+  }) => {
+    g.font = "600 17px Helvetica, Arial, sans-serif";
+    const mx = (p1.x + p2.x) / 2,
+      my = (p1.y + p2.y) / 2,
+      tw = g.measureText(l.etichetta).width;
+    g.fillStyle = "#fbf8f1";
+    g.fillRect(mx - tw / 2 - 5, my - 14, tw + 10, 24);
+    g.fillStyle = "#6b5217";
+    g.textAlign = "center";
+    g.textBaseline = "alphabetic";
+    g.fillText(l.etichetta, mx, my + 4);
+    g.textAlign = "left";
+  });
+  return {
+    jpeg: dataUrlAJpeg(c.toDataURL("image/jpeg", 0.88)),
+    w: c.width,
+    h: c.height,
+    dataUrl: c.toDataURL("image/jpeg", 0.88)
+  };
+}
+async function preparaPdf(doc, immagineLavagna) {
+  const voci = [];
+  let conta = 0;
+  for (const v of doc.voci || []) {
+    let immagine = null;
+    if (v.anteprima && conta < 40) {
+      const m = await jpegDaUrl(v.anteprima, 360);
+      if (m) {
+        immagine = {
+          jpeg: m.jpeg,
+          w: m.w,
+          h: m.h
+        };
+        conta++;
+      }
+    }
+    voci.push({
+      ...v,
+      immagine
+    });
+  }
+  const bytes = creaPdf({
+    ...doc,
+    voci,
+    immagine: immagineLavagna ? {
+      jpeg: immagineLavagna.jpeg,
+      w: immagineLavagna.w,
+      h: immagineLavagna.h
+    } : null
+  });
+  return new Blob([bytes], {
+    type: "application/pdf"
+  });
+}
+function puoCondividereFile(file) {
+  try {
+    return !!(navigator.share && navigator.canShare && navigator.canShare({
+      files: [file]
+    }));
+  } catch (e) {
+    return false;
+  }
+}
+function scaricaBlob(blob, nome) {
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+const LIMITE_MAIL = 1500;
+function ModaleCondividi({
+  doc,
+  lavagna,
+  onChiudi,
+  avvisa
+}) {
+  const [pdf, setPdf] = useState(null);
+  const [img, setImg] = useState(null);
+  const [errore, setErrore] = useState("");
+  const [copiato, setCopiato] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const im = lavagna && doc.conImmagine ? await disegnaLavagna(lavagna.lav, lavagna.spunti, lavagna.portieri, lavagna.misure) : null;
+        if (!vivo) return;
+        if (im) setImg({
+          dataUrl: im.dataUrl,
+          blob: dataUrlToBlob(im.dataUrl)
+        });
+        const b = await preparaPdf(doc, im);
+        if (vivo) setPdf(b);
+      } catch (e) {
+        if (vivo) setErrore("Non riesco a preparare il PDF: " + (e && e.message ? e.message : "errore"));
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  const testoWa = documentoATesto(doc, true);
+  const testoMail = documentoATesto(doc, false);
+  const nomePdf = nomeFileSicuro(doc.nomeFile || doc.titolo, "pdf");
+  const nomeImg = nomeFileSicuro(doc.nomeFile || doc.titolo, "jpg");
+  const condividiFile = async (blob, nome, tipo) => {
+    const file = new File([blob], nome, {
+      type: tipo
+    });
+    if (puoCondividereFile(file)) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: doc.titolo
+        });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+      }
+    }
+    scaricaBlob(blob, nome);
+    avvisa("File scaricato: ora puoi allegarlo a WhatsApp o all'email.");
+  };
+  const copia = async t => {
+    try {
+      await navigator.clipboard.writeText(t);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+  const whatsapp = () => {
+    window.open("https://wa.me/?text=" + encodeURIComponent(testoWa), "_blank", "noopener");
+  };
+  const email = async () => {
+    let corpo = testoMail;
+    if (corpo.length > LIMITE_MAIL) {
+      const ok = await copia(testoMail);
+      corpo = corpo.slice(0, LIMITE_MAIL).replace(/\n[^\n]*$/, "") + "\n\n[…] Elenco completo nel PDF allegato" + (ok ? " (il testo intero è negli appunti)." : ".");
+      avvisa("Il testo è lungo: nell'email trovi un riassunto. Allega anche il PDF.");
+    }
+    window.location.href = "mailto:?subject=" + encodeURIComponent(doc.titolo + " · GK Mind") + "&body=" + encodeURIComponent(corpo);
+  };
+  const copiaTesto = async () => {
+    const ok = await copia(testoMail);
+    if (ok) {
+      setCopiato(true);
+      setTimeout(() => setCopiato(false), 2000);
+    } else avvisa("Non riesco a copiare: seleziona il testo e copialo a mano.");
+  };
+  const pronto = !!pdf;
+  return React.createElement(Velo, {
+    onChiudi: onChiudi,
+    largo: true
+  }, React.createElement("div", {
+    className: "modale-testa"
+  }, React.createElement("p", {
+    className: "modale-titolo"
+  }, "📤 Condividi “", doc.titolo, "”"), React.createElement("button", {
+    className: "btn icona",
+    onClick: onChiudi,
+    "aria-label": "Chiudi"
+  }, "✕")), errore && React.createElement("p", {
+    className: "avviso-campo"
+  }, "⚠️ ", errore), !pronto && !errore && React.createElement("p", {
+    className: "suggerimento"
+  }, "Preparo il PDF…"), img && React.createElement("div", {
+    className: "anteprima-export"
+  }, React.createElement("img", {
+    src: img.dataUrl,
+    alt: "Anteprima della lavagna"
+  })), React.createElement("div", {
+    className: "griglia-condividi"
+  }, React.createElement("button", {
+    className: "btn primario",
+    disabled: !pronto,
+    onClick: () => condividiFile(pdf, nomePdf, "application/pdf")
+  }, "📄 Invia il PDF…", React.createElement("span", {
+    className: "sotto"
+  }, "WhatsApp, Mail, AirDrop, Messaggi")), React.createElement("button", {
+    className: "btn",
+    disabled: !pronto,
+    onClick: () => scaricaBlob(pdf, nomePdf)
+  }, "⬇ Scarica il PDF"), img && React.createElement("button", {
+    className: "btn",
+    onClick: () => condividiFile(img.blob, nomeImg, "image/jpeg")
+  }, "🖼 Invia come immagine…", React.createElement("span", {
+    className: "sotto"
+  }, "solo la lavagna")), React.createElement("button", {
+    className: "btn",
+    onClick: whatsapp
+  }, "💬 Testo su WhatsApp", React.createElement("span", {
+    className: "sotto"
+  }, "apre WhatsApp con il riepilogo")), React.createElement("button", {
+    className: "btn",
+    onClick: email
+  }, "✉️ Testo in un'email", React.createElement("span", {
+    className: "sotto"
+  }, "si apre la tua app di posta")), React.createElement("button", {
+    className: "btn",
+    onClick: copiaTesto
+  }, copiato ? "✓ Copiato" : "📋 Copia il testo")), React.createElement("p", {
+    className: "suggerimento"
+  }, "Il PDF contiene i link cliccabili, le anteprime e i collegamenti. Per mandarlo su WhatsApp o per email usa “Invia il PDF”; se il tuo dispositivo non lo permette, il file si scarica e lo allegherai a mano."));
+}
 const LAV_W = 3200;
 const LAV_H = 2200;
 const LAV_LARGHEZZE = {
@@ -1220,7 +2182,8 @@ function Lavagna({
   onNuova,
   onApriSpunto,
   onApriPortiere,
-  onConferma
+  onConferma,
+  onCondividi
 }) {
   const lav = lavagne.find(l => l.id === lavagnaId) || lavagne[0] || null;
   const vuota = {
@@ -1376,7 +2339,7 @@ function Lavagna({
     });
   };
   const giu = (ev, e) => {
-    if (ev.target.closest && ev.target.closest("textarea, input, select")) return;
+    if (ev.target.closest && ev.target.closest("textarea, input, select, button")) return;
     if (ev.button) return;
     const inizio = {
       x: ev.clientX,
@@ -1572,6 +2535,14 @@ function Lavagna({
     onClick: () => setZoom(z => Math.min(1.6, Math.round((z + 0.1) * 10) / 10)),
     "aria-label": "Ingrandisci"
   }, "+"), React.createElement("button", {
+    className: "btn piccolo",
+    disabled: el.length === 0,
+    onClick: () => onCondividi({
+      ...lav,
+      elementi: el,
+      collegamenti: dati.collegamenti
+    }, misure)
+  }, "📤 Condividi"), React.createElement("button", {
     className: "btn piccolo",
     disabled: el.length < 2,
     onClick: () => onConferma("Riordinare tutti gli elementi in file ordinate? Le posizioni attuali verranno cambiate.", riordina, "Riordina")
@@ -1782,9 +2753,9 @@ function Lavagna({
       }, React.createElement(Img, {
         src: s.anteprima,
         alt: s.titolo
-      }), s.tipo === "video" && React.createElement("span", {
-        className: "play"
-      }, "▶")) : React.createElement("div", {
+      }), React.createElement(PulsantePlay, {
+        s: s
+      })) : React.createElement("div", {
         className: "lav-img vuoto"
       }, iconaTipo(s)), React.createElement("p", {
         className: "lav-titolo-sp"
@@ -1920,7 +2891,8 @@ function PortiereScheda({
   onCollega,
   onScollega,
   onLavagna,
-  onModifica
+  onModifica,
+  onCondividi
 }) {
   const [nota, setNota] = useState(p.note || "");
   useEffect(() => {
@@ -1941,6 +2913,9 @@ function PortiereScheda({
     className: "btn piccolo",
     onClick: onLavagna
   }, "🧠 Metti sulla lavagna"), React.createElement("button", {
+    className: "btn piccolo",
+    onClick: onCondividi
+  }, "📤 Condividi"), React.createElement("button", {
     className: "btn piccolo",
     onClick: onModifica
   }, "✎ Modifica"), React.createElement("button", {
@@ -2378,13 +3353,17 @@ function Home({
     className: "widget-nota"
   }, "Più seguiti: ", piuSeguiti.map(x => x.p.nome + " (" + x.n + ")").join(" · "))), React.createElement(Widget, {
     titolo: "🎯 Aree di lavoro"
-  }, React.createElement("div", {
+  }, gruppiAree(areeDisponibili).map(g => React.createElement("div", {
+    key: g.nome
+  }, React.createElement("p", {
+    className: "gruppo-etichetta"
+  }, g.nome), React.createElement("div", {
     className: "chips fitto"
-  }, areeDisponibili.map(a => React.createElement("button", {
+  }, g.aree.map(a => React.createElement("button", {
     key: a,
     className: "chip",
     onClick: () => onArea(a)
-  }, a, " (", conta(a), ")")))), React.createElement(Widget, {
+  }, a, " (", conta(a), ")")))))), React.createElement(Widget, {
     titolo: "★ Preferiti",
     azione: "Tutti →",
     onAzione: () => onVai({
@@ -2452,6 +3431,67 @@ function iconaTipo(s) {
 function settoreDi(id) {
   return SETTORI.find(x => x.id === id) || null;
 }
+function PulsantePlay({
+  s,
+  className
+}) {
+  const guarda = React.useContext(ContestoGuarda);
+  const info = s.tipo === "video" ? analizzaLink(s.url) : null;
+  if (s.tipo !== "video") return null;
+  if (!guarda || !info || !info.embed) return React.createElement("span", {
+    className: "play" + (className ? " " + className : "")
+  }, "▶");
+  return React.createElement("button", {
+    className: "play attivo" + (className ? " " + className : ""),
+    "aria-label": "Guarda il video",
+    onPointerDown: e => e.stopPropagation(),
+    onClick: e => {
+      e.stopPropagation();
+      guarda(s);
+    }
+  }, "▶");
+}
+function PlayerVelo({
+  s,
+  onChiudi
+}) {
+  const info = analizzaLink(s.url);
+  return React.createElement(Velo, {
+    onChiudi: onChiudi,
+    largo: true
+  }, React.createElement("div", {
+    className: "modale-testa"
+  }, React.createElement("p", {
+    className: "modale-titolo"
+  }, "🎬 ", s.titolo || "Video"), React.createElement("button", {
+    className: "btn icona",
+    onClick: onChiudi,
+    "aria-label": "Chiudi"
+  }, "✕")), info && info.embed ? React.createElement("div", {
+    className: "player" + (info.verticale ? " verticale" : "")
+  }, React.createElement("iframe", {
+    title: s.titolo || "video",
+    src: embedAutoplay(info),
+    allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",
+    allowFullScreen: true
+  })) : React.createElement("p", {
+    className: "vuoto-msg"
+  }, "Per questo link non c'è un lettore: usa “Apri l'originale”."), s.nota && React.createElement("p", {
+    className: "dettaglio-nota"
+  }, s.nota), React.createElement("div", {
+    className: "azioni"
+  }, s.url && React.createElement("a", {
+    className: "btn",
+    href: s.url,
+    target: "_blank",
+    rel: "noopener noreferrer"
+  }, "↗ Apri su ", info && info.nome ? info.nome : "il sito"), React.createElement("button", {
+    className: "btn",
+    onClick: onChiudi
+  }, "Chiudi")), info && (info.piattaforma === "instagram" || info.piattaforma === "tiktok") && React.createElement("p", {
+    className: "suggerimento"
+  }, "Se il video non parte (succede con i profili privati), apri l'originale: puoi salvare uno screenshot come anteprima."));
+}
 function Scheda({
   s,
   onApri,
@@ -2471,9 +3511,9 @@ function Scheda({
   }, React.createElement(Img, {
     src: s.anteprima,
     alt: s.titolo
-  }), s.tipo === "video" && React.createElement("span", {
-    className: "play"
-  }, "▶")) : React.createElement("div", {
+  }), React.createElement(PulsantePlay, {
+    s: s
+  })) : React.createElement("div", {
     className: "card-vuoto"
   }, iconaTipo(s)), React.createElement("div", {
     className: "card-corpo"
@@ -2532,7 +3572,8 @@ function Dettaglio({
   onToggleSelezione,
   onNuovaSelezione,
   onMettiLavagna,
-  onApriPortiere
+  onApriPortiere,
+  onCondividi
 }) {
   const info = analizzaLink(s.url);
   const [riproduci, setRiproduci] = useState(false);
@@ -2554,7 +3595,7 @@ function Dettaglio({
     className: "player" + (verticale ? " verticale" : "")
   }, React.createElement("iframe", {
     title: s.titolo || "video",
-    src: info.embed,
+    src: embedAutoplay(info),
     allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",
     allowFullScreen: true
   })) : s.anteprima ? React.createElement("div", {
@@ -2612,6 +3653,9 @@ function Dettaglio({
     className: "btn",
     onClick: () => onMettiLavagna(s)
   }, "🧠 Metti sulla lavagna"), React.createElement("button", {
+    className: "btn",
+    onClick: () => onCondividi(s)
+  }, "📤 Condividi"), React.createElement("button", {
     className: "btn",
     onClick: () => onModifica(s)
   }, "✎ Modifica"), React.createElement("button", {
@@ -2677,6 +3721,7 @@ function FormSpunto({
   const [nuovaArea, setNuovaArea] = useState("");
   const [areeExtra, setAreeExtra] = useState([]);
   const [fileVideo, setFileVideo] = useState(false);
+  const [provaVideo, setProvaVideo] = useState(false);
   const info = useMemo(() => analizzaLink(f.url), [f.url]);
   const infoUrl = info ? info.url : "";
   useEffect(() => {
@@ -2745,6 +3790,34 @@ function FormSpunto({
     }
     setStato("");
   };
+  const daAppunti = e => {
+    const files = Array.from(e.clipboardData && e.clipboardData.files || []).filter(x => /^image\//.test(x.type));
+    if (files.length) {
+      e.preventDefault();
+      scegliImmagine(files[0]);
+    }
+  };
+  const daTrascinamento = e => {
+    const files = Array.from(e.dataTransfer && e.dataTransfer.files || []);
+    const im = files.find(x => /^image\//.test(x.type)),
+      vd = files.find(x => /^video\//.test(x.type));
+    if (im) {
+      e.preventDefault();
+      scegliImmagine(im);
+    } else if (vd) {
+      e.preventDefault();
+      scegliVideo(vd);
+    } else {
+      const t = e.dataTransfer && (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain"));
+      if (t && /^https?:\/\//i.test(t.trim())) {
+        e.preventDefault();
+        setF(x => ({
+          ...x,
+          url: t.trim().split("\n")[0]
+        }));
+      }
+    }
+  };
   const toggleArea = a => setF(x => ({
     ...x,
     aree: x.aree.includes(a) ? x.aree.filter(y => y !== a) : [...x.aree, a]
@@ -2803,6 +3876,10 @@ function FormSpunto({
     onChiudi: onAnnulla,
     largo: true
   }, React.createElement("div", {
+    onPasteCapture: daAppunti,
+    onDragOver: e => e.preventDefault(),
+    onDrop: daTrascinamento
+  }, React.createElement("div", {
     className: "modale-testa"
   }, React.createElement("p", {
     className: "modale-titolo"
@@ -2827,7 +3904,19 @@ function FormSpunto({
     onClick: incolla
   }, "📋 Incolla")), info && React.createElement("p", {
     className: "suggerimento"
-  }, "Riconosciuto: ", React.createElement("strong", null, info.nome), info.embed ? " · si potrà guardare dentro l'app" : ""), React.createElement("div", {
+  }, "Riconosciuto: ", React.createElement("strong", null, info.nome), info.embed ? " · il video si guarda direttamente nell'app" : ""), info && info.embed && (provaVideo ? React.createElement("div", {
+    className: "player" + (info.verticale ? " verticale" : "")
+  }, React.createElement("iframe", {
+    title: "anteprima video",
+    src: embedAutoplay(info),
+    allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen",
+    allowFullScreen: true
+  })) : React.createElement("button", {
+    className: "btn piccolo",
+    onClick: () => setProvaVideo(true)
+  }, "▶ Guarda il video qui")), info && (info.piattaforma === "instagram" || info.piattaforma === "tiktok") && React.createElement("p", {
+    className: "suggerimento"
+  }, "Instagram e TikTok non danno l'immagine del video: fai uno screenshot e incollalo qui (Cmd+V) o trascinalo, così hai l'anteprima nelle schede."), React.createElement("div", {
     className: "riga-file"
   }, React.createElement("label", {
     className: "btn piccolo"
@@ -2944,13 +4033,17 @@ function FormSpunto({
     value: p.id
   }, p.nome, p.anno ? " · " + p.anno : ""))), React.createElement("label", {
     className: "etichetta"
-  }, "Aree di lavoro"), React.createElement("div", {
+  }, "Aree di lavoro"), gruppiAree(tutteLeAree).map(g => React.createElement("div", {
+    key: g.nome
+  }, React.createElement("p", {
+    className: "gruppo-etichetta"
+  }, g.nome), React.createElement("div", {
     className: "chips fitto"
-  }, tutteLeAree.map(a => React.createElement("button", {
+  }, g.aree.map(a => React.createElement("button", {
     key: a,
     className: "chip" + (f.aree.includes(a) ? " attivo" : ""),
     onClick: () => toggleArea(a)
-  }, a))), React.createElement("div", {
+  }, a))))), React.createElement("div", {
     className: "riga-nuova"
   }, React.createElement("input", {
     className: "campo-in",
@@ -2984,7 +4077,7 @@ function FormSpunto({
   }, salvataggio ? "Salvo…" : f.id ? "Salva modifiche" : "Salva"), React.createElement("button", {
     className: "btn",
     onClick: onAnnulla
-  }, "Annulla")));
+  }, "Annulla"))));
 }
 function SelezioniLista({
   selezioni,
@@ -3063,7 +4156,8 @@ function SelezioneDettaglio({
   onElimina,
   onTogli,
   onSposta,
-  onAggiungi
+  onAggiungi,
+  onCondividi
 }) {
   const [rinomina, setRinomina] = useState(false);
   const [nomeTmp, setNomeTmp] = useState(sel.nome);
@@ -3098,6 +4192,10 @@ function SelezioneDettaglio({
   }, "📂 ", sel.nome), React.createElement("div", {
     className: "azioni"
   }, React.createElement("button", {
+    className: "btn piccolo",
+    disabled: dentro.length === 0 && !sel.nota,
+    onClick: onCondividi
+  }, "📤 Condividi"), React.createElement("button", {
     className: "btn piccolo",
     onClick: () => {
       setNomeTmp(sel.nome);
@@ -3458,8 +4556,11 @@ function App() {
   });
   const [ricerca, setRicerca] = useState("");
   const [fonteFiltro, setFonteFiltro] = useState("");
-  const [areaFiltro, setAreaFiltro] = useState("");
+  const [areaFiltro, setAreaFiltro] = useState([]);
+  const [areePannello, setAreePannello] = useState(false);
   const [apertoId, setApertoId] = useState(null);
+  const [guardaSpunto, setGuardaSpunto] = useState(null);
+  const [condividi, setCondividi] = useState(null);
   const [form, setForm] = useState(null);
   const [formPortiere, setFormPortiere] = useState(null);
   const [sincronizzaAperta, setSincronizzaAperta] = useState(false);
@@ -3478,7 +4579,18 @@ function App() {
   const caricaDa = async s => {
     try {
       const d = await s.carica();
-      setSpunti(d.spunti);
+      const spuntiAggiornati = d.spunti.map(x => {
+        const aree = x.aree || [];
+        if (!aree.some(a => AREE_RINOMINATE[a])) return x;
+        const n = {
+          ...x,
+          aree: Array.from(new Set(aree.map(a => AREE_RINOMINATE[a] || a))),
+          modificato_il: adesso()
+        };
+        s.salvaSpunto(n).catch(() => {});
+        return n;
+      });
+      setSpunti(spuntiAggiornati);
       setSelezioni(d.selezioni);
       setPortieri(d.portieri || []);
       setLavagne(d.lavagne || []);
@@ -3929,7 +5041,7 @@ function App() {
   }, [spunti, vista]);
   const visibili = useMemo(() => {
     let l = vistaElenco ? base : spunti;
-    if (areaFiltro) l = l.filter(s => (s.aree || []).includes(areaFiltro));
+    if (areaFiltro.length) l = l.filter(s => areaFiltro.every(a => (s.aree || []).includes(a)));
     if (fonteFiltro) l = l.filter(s => s.fonte === fonteFiltro);
     if (qq) l = l.filter(s => pulisci([s.titolo, s.nota, s.fonte, s.url, (s.aree || []).join(" "), (settoreDi(s.settore) || {}).nome || "", (s.portieri || []).map(id => (portieri.find(p => p.id === id) || {}).nome || "").join(" ")].join(" ")).includes(qq));
     return l.slice().sort((a, b) => (b.creato_il || "").localeCompare(a.creato_il || ""));
@@ -3942,8 +5054,10 @@ function App() {
     setVista(v);
     setRicerca("");
     setFonteFiltro("");
-    setAreaFiltro("");
+    setAreaFiltro([]);
+    setAreePannello(false);
   };
+  const toggleAreaFiltro = a => setAreaFiltro(l => l.includes(a) ? l.filter(x => x !== a) : [...l, a]);
   const apriNuovo = () => setForm({
     settore: vista.tipo === "settore" ? vista.valore : "",
     portieri: vista.tipo === "portiere" && portiereAperto ? [portiereAperto.id] : []
@@ -4013,7 +5127,9 @@ function App() {
   const datiLocaliPresenti = datiLocali.spunti.length + datiLocali.selezioni.length + datiLocali.portieri.length + datiLocali.lavagne.length > 0;
   const nSett = id => spunti.filter(s => s.settore === id).length;
   const avvisoSchema = tabelleMancanti.length > 0 ? "Al database mancano le tabelle per " + tabelleMancanti.join(" e ") + ": esegui di nuovo il file database-spunti.sql in Supabase." : "";
-  return React.createElement("div", {
+  return React.createElement(ContestoGuarda.Provider, {
+    value: s => setGuardaSpunto(s)
+  }, React.createElement("div", {
     className: "app"
   }, React.createElement("header", {
     className: "testa"
@@ -4058,7 +5174,28 @@ function App() {
     tipo: "selezioni"
   }), "sel")), mostraElenco && React.createElement(React.Fragment, null, React.createElement("nav", {
     className: "chips aree-riga"
-  }, chip(!areaFiltro, "Tutte le aree", () => setAreaFiltro(""), "area-tutte"), areeDisponibili.map(a => chip(areaFiltro === a, a + " (" + (vistaElenco ? base : spunti).filter(s => (s.aree || []).includes(a)).length + ")", () => setAreaFiltro(areaFiltro === a ? "" : a), "area-" + a))), fonti.length > 0 && React.createElement("select", {
+  }, chip(areaFiltro.length > 0 || areePannello, "🎯 Aree" + (areaFiltro.length ? " (" + areaFiltro.length + ")" : "") + (areePannello ? " ▴" : " ▾"), () => setAreePannello(v => !v), "aree-apri"), areaFiltro.map(a => React.createElement("button", {
+    key: "sel-" + a,
+    className: "chip attivo",
+    onClick: () => toggleAreaFiltro(a)
+  }, a, " ✕")), areaFiltro.length > 0 && React.createElement("button", {
+    className: "chip",
+    onClick: () => setAreaFiltro([])
+  }, "Azzera")), areePannello && React.createElement("div", {
+    className: "aree-pannello"
+  }, React.createElement("p", {
+    className: "suggerimento"
+  }, "Scegli una o più aree: per incrociarle, per esempio Atletico + Tuffo."), gruppiAree(areeDisponibili).map(g => React.createElement("div", {
+    key: g.nome
+  }, React.createElement("p", {
+    className: "gruppo-etichetta"
+  }, g.nome), React.createElement("div", {
+    className: "chips fitto"
+  }, g.aree.map(a => React.createElement("button", {
+    key: a,
+    className: "chip" + (areaFiltro.includes(a) ? " attivo" : ""),
+    onClick: () => toggleAreaFiltro(a)
+  }, a, " (", (vistaElenco ? base : spunti).filter(s => (s.aree || []).includes(a)).length, ")")))))), fonti.length > 0 && React.createElement("select", {
     className: "campo-in filtro-fonte",
     value: fonteFiltro,
     onChange: e => setFonteFiltro(e.target.value)
@@ -4085,7 +5222,7 @@ function App() {
       vai({
         tipo: "tutti"
       });
-      setAreaFiltro(a);
+      setAreaFiltro([a]);
     },
     onApriSpunto: setApertoId,
     onPreferito: preferito,
@@ -4108,7 +5245,16 @@ function App() {
     onElimina: eliminaLavagna,
     onApriSpunto: setApertoId,
     onApriPortiere: apriPortiere,
-    onConferma: chiedi
+    onConferma: chiedi,
+    onCondividi: (lav, misure) => setCondividi({
+      doc: docLavagna(lav, spunti, portieri),
+      lavagna: {
+        lav,
+        spunti,
+        portieri,
+        misure
+      }
+    })
   }), vista.tipo === "portieri" && !qq && React.createElement(PortieriVista, {
     portieri: portieri,
     spunti: spunti,
@@ -4133,7 +5279,10 @@ function App() {
     onNuovoSpunto: apriNuovo,
     onCollega: () => setCollegaPortiereId(portiereAperto.id),
     onScollega: s => togliPortiereDaSpunto(s, portiereAperto.id),
-    onLavagna: () => mettiSuLavagna("portiere", portiereAperto.id)
+    onLavagna: () => mettiSuLavagna("portiere", portiereAperto.id),
+    onCondividi: () => setCondividi({
+      doc: docPortiere(portiereAperto, spuntiDelPortiere, portieri)
+    })
   }), vista.tipo === "portiere" && !qq && !portiereAperto && React.createElement("p", {
     className: "vuoto-msg"
   }, "Portiere non trovato."), vista.tipo === "selezioni" && !qq && React.createElement(SelezioniLista, {
@@ -4164,7 +5313,10 @@ function App() {
     onElimina: x => chiedi('Eliminare la selezione "' + x.nome + '"? Gli spunti al suo interno non vengono cancellati.', () => eliminaSelezione(x)),
     onTogli: toggleInSelezione,
     onSposta: spostaInSelezione,
-    onAggiungi: () => setSceglispunti(true)
+    onAggiungi: () => setSceglispunti(true),
+    onCondividi: () => setCondividi({
+      doc: docSelezione(selezioneAperta, spunti, portieri)
+    })
   })), vista.tipo === "selezione" && !qq && !selezioneAperta && React.createElement("p", {
     className: "vuoto-msg"
   }, "Selezione non trovata."), mostraElenco && React.createElement(React.Fragment, null, settoreAttivo && !qq && React.createElement("p", {
@@ -4197,7 +5349,10 @@ function App() {
     onToggleSelezione: toggleInSelezione,
     onNuovaSelezione: (nome, spuntoId) => creaSelezione(nome, spuntoId),
     onMettiLavagna: s => mettiSuLavagna("spunto", s.id),
-    onApriPortiere: apriPortiere
+    onApriPortiere: apriPortiere,
+    onCondividi: s => setCondividi({
+      doc: docSpunto(s, portieri)
+    })
   }), form && React.createElement(FormSpunto, {
     iniziale: form,
     areeDisponibili: areeDisponibili,
@@ -4301,10 +5456,18 @@ function App() {
   }, conferma.etichetta), React.createElement("button", {
     className: "btn",
     onClick: () => setConferma(null)
-  }, "Annulla"))), toast && React.createElement("div", {
+  }, "Annulla"))), guardaSpunto && React.createElement(PlayerVelo, {
+    s: guardaSpunto,
+    onChiudi: () => setGuardaSpunto(null)
+  }), condividi && React.createElement(ModaleCondividi, {
+    doc: condividi.doc,
+    lavagna: condividi.lavagna,
+    avvisa: avvisa,
+    onChiudi: () => setCondividi(null)
+  }), toast && React.createElement("div", {
     className: "toast",
     role: "status"
-  }, toast));
+  }, toast)));
 }
 function oggiIso() {
   const d = new Date();
@@ -4317,7 +5480,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 //  GK MIND — funzioni di base
 // ============================================================
 const { useState, useEffect, useLayoutEffect, useMemo, useRef } = React;
-const VERSIONE = "GK Mind v2 · 9 ott 2026";
+const VERSIONE = "GK Mind v3 · 10 ott 2026";
 const NOME_APP = "GK Mind";
 // Settori in cui si dividono gli spunti (i portieri hanno una sezione tutta loro).
 const SETTORI = [
@@ -4329,7 +5492,20 @@ const SETTORI = [
 const GEST_URL = "https://xvevxohwcozcwgrewmnt.supabase.co";
 const GEST_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2ZXZ4b2h3Y296Y3dncmV3bW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzQ3MzEsImV4cCI6MjEwMzM1MDczMX0.akZjZRmt5gRfK4wwZOcEP7k-R34n25oerKU7Kb5MNiU";
 const CHIAVE_GEST_SESSIONE = "gkmind-gestionale-sessione-v1";
-const AREE_BASE = ["Situazionale", "Analitico", "Uscite alte", "Lavoro coi piedi", "Lettura del gioco", "Atletico"];
+// Aree di lavoro, raggruppate come la tua metodologia.
+const AREE_GRUPPI = [
+  { nome: "Metodologie", aree: ["Gioco ludico", "Analitico", "Globale / situazionale", "Squadra"] },
+  { nome: "Gesti tecnici · fase offensiva", aree: ["Distribuzione con le mani", "Distribuzione con i piedi"] },
+  { nome: "Gesti tecnici · fase difensiva", aree: ["Presa", "Tuffo", "Deviazione", "Uscita alta", "Uscita bassa", "Gestione 1vs1"] },
+  { nome: "Atletico in funzione del gesto tecnico", aree: ["Atletico"] },
+];
+const AREE_BASE = AREE_GRUPPI.reduce((tot, g) => tot.concat(g.aree), []);
+// Le aree della prima versione, portate sulle voci nuove.
+const AREE_RINOMINATE = { "Situazionale": "Globale / situazionale", "Uscite alte": "Uscita alta", "Lavoro coi piedi": "Distribuzione con i piedi" };
+function gruppiAree(disponibili) {
+  const extra = disponibili.filter((a) => !AREE_BASE.includes(a));
+  return extra.length ? AREE_GRUPPI.concat([{ nome: "Altre aree", aree: extra }]) : AREE_GRUPPI;
+}
 
 function uid() {
   if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -4378,6 +5554,17 @@ function analizzaLink(url) {
   if (tk) return { url: u, piattaforma: "tiktok", nome: "TikTok", host, id: tk[1], embed: "https://www.tiktok.com/embed/v2/" + tk[1], verticale: true };
   return { url: u, piattaforma: "web", nome: host, host };
 }
+
+// Indirizzo del lettore con avvio automatico (il tocco su ▶ è già il permesso per partire).
+function embedAutoplay(info) {
+  if (!info || !info.embed) return "";
+  if (info.piattaforma === "youtube") return info.embed + "&autoplay=1&playsinline=1";
+  if (info.piattaforma === "vimeo") return info.embed + "?autoplay=1";
+  return info.embed;
+}
+
+// Permette a schede e lavagna di aprire il lettore video a schermo.
+const ContestoGuarda = React.createContext(null);
 
 function tipoDaLink(info) {
   if (!info) return "nota";
@@ -4745,6 +5932,568 @@ function creaStoreCloud(cfg) {
 }
 
 // ============================================================
+//  GK MIND — creazione di un PDF vero (senza librerie esterne)
+//  Testo con link cliccabili, immagini JPEG, più pagine A4.
+// ============================================================
+const PDF_LARGH_HELV = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
+const PDF_WIN = { 0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F };
+
+// Porta un testo in una forma che il PDF (font standard) sa scrivere: toglie emoji e simboli non supportati.
+function pdfPulisci(t) {
+  return String(t == null ? "" : t)
+    .replace(/→/g, "->").replace(/←/g, "<-").replace(/★/g, "*").replace(/☆/g, "*").replace(/✓/g, "ok").replace(/…/g, "...")
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200B}-\u{200F}]/gu, "")
+    .replace(/\t/g, " ").replace(/\r/g, "")
+    .split("").map((ch) => {
+      const c = ch.charCodeAt(0);
+      if (c === 10) return "\n";
+      if ((c >= 32 && c <= 126) || (c >= 160 && c <= 255) || PDF_WIN[c]) return ch;
+      return "";
+    }).join("");
+}
+function pdfByte(ch) {
+  const c = ch.charCodeAt(0);
+  return PDF_WIN[c] || c;
+}
+function pdfLarghezza(testo, size, grassetto) {
+  let w = 0;
+  for (let i = 0; i < testo.length; i++) {
+    const c = testo.charCodeAt(i);
+    w += c >= 32 && c <= 126 ? PDF_LARGH_HELV[c - 32] : 556;
+  }
+  return (w * size * (grassetto ? 1.07 : 1)) / 1000;
+}
+function pdfSpezza(testo, size, grassetto, maxW) {
+  const righe = [];
+  String(testo).split("\n").forEach((par) => {
+    if (par === "") { righe.push(""); return; }
+    let corrente = "";
+    par.split(" ").forEach((parola) => {
+      let p = parola;
+      while (pdfLarghezza(p, size, grassetto) > maxW) {
+        let n = p.length;
+        while (n > 1 && pdfLarghezza(p.slice(0, n), size, grassetto) > maxW) n--;
+        if (corrente) { righe.push(corrente); corrente = ""; }
+        righe.push(p.slice(0, n));
+        p = p.slice(n);
+      }
+      const prova = corrente ? corrente + " " + p : p;
+      if (corrente && pdfLarghezza(prova, size, grassetto) > maxW) { righe.push(corrente); corrente = p; }
+      else corrente = prova;
+    });
+    righe.push(corrente);
+  });
+  return righe;
+}
+function pdfLit(testo) {
+  let s = "(";
+  for (let i = 0; i < testo.length; i++) {
+    const ch = testo[i];
+    const b = pdfByte(ch);
+    if (ch === "(" || ch === ")" || ch === "\\") s += "\\" + ch;
+    else if (b > 126 || b < 32) s += "\\" + ("000" + b.toString(8)).slice(-3);
+    else s += ch;
+  }
+  return s + ")";
+}
+function pdfUrlSicuro(u) {
+  return String(u).replace(/[^\x21-\x7e]/g, (c) => encodeURIComponent(c)).replace(/[()\\]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+}
+function pdfNum(n) { return (Math.round(n * 100) / 100).toString(); }
+
+// doc: { titolo, sottotitolo, nota, immagine:{jpeg:Uint8Array,w,h}|null, voci:[{n,tipoEtichetta,titolo,meta,url,nota,immagine}], collegamenti:[{testo}], sezioneVoci, piede }
+function creaPdf(doc) {
+  const PW = 595.28, PH = 841.89, M = 42, W = PW - 2 * M;
+  const pagine = [];
+  const immagini = [];
+  let y = 0;
+  const nuovaPagina = () => { pagine.push({ ops: [], annots: [], imgs: [] }); y = PH - M; };
+  const pg = () => pagine[pagine.length - 1];
+  const serve = (h) => { if (y - h < M + 14) nuovaPagina(); };
+  const colore = (c) => (c || [0.13, 0.13, 0.13]).map(pdfNum).join(" ");
+  const testo = (s, x, yy, size, grassetto, c) => {
+    if (!s) return;
+    pg().ops.push("BT " + colore(c) + " rg /" + (grassetto ? "F2" : "F1") + " " + size + " Tf " + pdfNum(x) + " " + pdfNum(yy) + " Td " + pdfLit(s) + " Tj ET");
+  };
+  const riquadroImmagine = (img, larghezza, maxAlt) => {
+    let w = larghezza, h = (img.h / img.w) * w;
+    if (h > maxAlt) { h = maxAlt; w = (img.w / img.h) * h; }
+    serve(h + 6);
+    let idx = immagini.indexOf(img);
+    if (idx < 0) { immagini.push(img); idx = immagini.length - 1; }
+    pg().imgs.indexOf(idx) < 0 && pg().imgs.push(idx);
+    pg().ops.push("q " + pdfNum(w) + " 0 0 " + pdfNum(h) + " " + pdfNum(M) + " " + pdfNum(y - h) + " cm /Im" + idx + " Do Q");
+    y -= h + 8;
+  };
+  const paragrafo = (s, size, grassetto, c, opz) => {
+    const o = opz || {};
+    const rientro = o.rientro || 0;
+    const interlinea = size * 1.32;
+    pdfSpezza(pdfPulisci(s), size, grassetto, W - rientro).forEach((riga) => {
+      serve(interlinea);
+      y -= interlinea;
+      testo(riga, M + rientro, y, size, grassetto, c);
+      if (o.url && riga) {
+        const w = pdfLarghezza(riga, size, grassetto);
+        pg().ops.push("0.1 0.3 0.7 RG 0.5 w " + pdfNum(M + rientro) + " " + pdfNum(y - 1.5) + " m " + pdfNum(M + rientro + w) + " " + pdfNum(y - 1.5) + " l S");
+        pg().annots.push({ rect: [M + rientro, y - 3, M + rientro + w, y + size], url: o.url });
+      }
+    });
+    y -= o.dopo == null ? 2 : o.dopo;
+  };
+
+  nuovaPagina();
+  paragrafo(doc.titolo || "GK Mind", 20, true, [0.1, 0.1, 0.1], { dopo: 2 });
+  if (doc.sottotitolo) paragrafo(doc.sottotitolo, 10, false, [0.45, 0.45, 0.45], { dopo: 4 });
+  pg().ops.push("0.83 0.69 0.42 RG 1.5 w " + pdfNum(M) + " " + pdfNum(y - 2) + " m " + pdfNum(M + W) + " " + pdfNum(y - 2) + " l S");
+  y -= 12;
+  if (doc.nota) paragrafo(doc.nota, 10.5, false, [0.2, 0.2, 0.2], { dopo: 8 });
+  if (doc.immagine) { riquadroImmagine(doc.immagine, W, 560); }
+
+  if (doc.voci && doc.voci.length) {
+    serve(40);
+    paragrafo(doc.sezioneVoci || "Elementi", 13, true, [0.55, 0.42, 0.15], { dopo: 6 });
+    doc.voci.forEach((v) => {
+      serve(52);
+      paragrafo((v.n ? v.n + ". " : "") + (v.titolo || ""), 11.5, true, [0.1, 0.1, 0.1], { dopo: 1 });
+      const meta = [v.tipoEtichetta].concat(v.meta || []).filter(Boolean).join("  ·  ");
+      if (meta) paragrafo(meta, 8.5, false, [0.5, 0.5, 0.5], { dopo: 1, rientro: 12 });
+      if (v.url) paragrafo(v.url, 8.5, false, [0.1, 0.3, 0.7], { dopo: 2, rientro: 12, url: v.url });
+      if (v.immagine) { const o = y; riquadroImmagine({ jpeg: v.immagine.jpeg, w: v.immagine.w, h: v.immagine.h }, 150, 90); if (o === y) y -= 0; }
+      if (v.nota) paragrafo(v.nota, 10, false, [0.2, 0.2, 0.2], { dopo: 2, rientro: 12 });
+      y -= 7;
+    });
+  }
+  if (doc.collegamenti && doc.collegamenti.length) {
+    serve(40);
+    paragrafo("Collegamenti", 13, true, [0.55, 0.42, 0.15], { dopo: 6 });
+    doc.collegamenti.forEach((c) => paragrafo("-  " + c.testo, 10, false, [0.2, 0.2, 0.2], { dopo: 2, rientro: 6 }));
+  }
+
+  // piè di pagina
+  pagine.forEach((p, i) => {
+    p.ops.push("BT 0.55 0.55 0.55 rg /F1 8 Tf " + pdfNum(M) + " 24 Td " + pdfLit(pdfPulisci(doc.piede || "GK Mind")) + " Tj ET");
+    const num = (i + 1) + " / " + pagine.length;
+    p.ops.push("BT 0.55 0.55 0.55 rg /F1 8 Tf " + pdfNum(PW - M - pdfLarghezza(num, 8, false)) + " 24 Td " + pdfLit(num) + " Tj ET");
+  });
+
+  // ---- assemblaggio del file ----
+  const pezzi = [];
+  let lunghezza = 0;
+  const offsets = [];
+  const bytes = (s) => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+  const scrivi = (dati) => { const a = typeof dati === "string" ? bytes(dati) : dati; pezzi.push(a); lunghezza += a.length; };
+  const oggetti = [];
+  const reserva = () => { oggetti.push(null); return oggetti.length; };
+  const imposta = (n, contenuto) => { oggetti[n - 1] = contenuto; };
+  const catalogo = reserva(), pagineOgg = reserva(), f1 = reserva(), f2 = reserva();
+  const imgNum = immagini.map(() => reserva());
+  immagini.forEach((im, i) => {
+    imposta(imgNum[i], { testa: "<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.jpeg.length + " >>", flusso: im.jpeg });
+  });
+  const pagNum = [];
+  pagine.forEach((p) => {
+    const contenuto = reserva();
+    const pag = reserva();
+    pagNum.push(pag);
+    const annotNum = p.annots.map((a) => {
+      const n = reserva();
+      imposta(n, { testa: "<< /Type /Annot /Subtype /Link /Rect [" + a.rect.map(pdfNum).join(" ") + "] /Border [0 0 0] /A << /S /URI /URI (" + pdfUrlSicuro(a.url) + ") >> >>" });
+      return n;
+    });
+    const flusso = bytes(p.ops.join("\n"));
+    imposta(contenuto, { testa: "<< /Length " + flusso.length + " >>", flusso });
+    const xo = p.imgs.length ? " /XObject << " + p.imgs.map((i) => "/Im" + i + " " + imgNum[i] + " 0 R").join(" ") + " >>" : "";
+    imposta(pag, { testa: "<< /Type /Page /Parent " + pagineOgg + " 0 R /MediaBox [0 0 " + pdfNum(PW) + " " + pdfNum(PH) + "] /Resources << /Font << /F1 " + f1 + " 0 R /F2 " + f2 + " 0 R >>" + xo + " >> /Contents " + contenuto + " 0 R" + (annotNum.length ? " /Annots [" + annotNum.map((n) => n + " 0 R").join(" ") + "]" : "") + " >>" });
+  });
+  imposta(catalogo, { testa: "<< /Type /Catalog /Pages " + pagineOgg + " 0 R >>" });
+  imposta(pagineOgg, { testa: "<< /Type /Pages /Kids [" + pagNum.map((n) => n + " 0 R").join(" ") + "] /Count " + pagNum.length + " >>" });
+  imposta(f1, { testa: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>" });
+  imposta(f2, { testa: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>" });
+
+  scrivi("%PDF-1.4\n%âãÏÓ\n");
+  oggetti.forEach((o, i) => {
+    offsets[i] = lunghezza;
+    scrivi((i + 1) + " 0 obj\n" + o.testa + "\n");
+    if (o.flusso) { scrivi("stream\n"); scrivi(o.flusso); scrivi("\nendstream\n"); }
+    scrivi("endobj\n");
+  });
+  const xref = lunghezza;
+  let tab = "xref\n0 " + (oggetti.length + 1) + "\n0000000000 65535 f \n";
+  offsets.forEach((o) => { tab += ("0000000000" + o).slice(-10) + " 00000 n \n"; });
+  scrivi(tab + "trailer\n<< /Size " + (oggetti.length + 1) + " /Root " + catalogo + " 0 R /Info << /Title " + pdfLit(pdfPulisci(doc.titolo || "GK Mind")) + " /Producer (GK Mind) >> >>\nstartxref\n" + xref + "\n%%EOF\n");
+  const fuori = new Uint8Array(lunghezza);
+  let pos = 0;
+  pezzi.forEach((a) => { fuori.set(a, pos); pos += a.length; });
+  return fuori;
+}
+
+// ============================================================
+//  GK MIND — esportazione: PDF, immagine, WhatsApp, email, copia
+// ============================================================
+
+// ---------- costruzione del documento ----------
+function vocePerSpunto(s, portieri, n) {
+  const info = analizzaLink(s.url);
+  const sett = settoreDi(s.settore);
+  const nomiP = (s.portieri || []).map((id) => (portieri.find((p) => p.id === id) || {}).nome).filter(Boolean);
+  const meta = [s.fonte, sett ? sett.nome : "", (s.aree || []).join(", "), nomiP.length ? "Portieri: " + nomiP.join(", ") : ""].filter(Boolean);
+  return {
+    n,
+    tipoEtichetta: info && info.nome && info.piattaforma !== "web" ? info.nome : s.tipo === "immagine" ? "Immagine" : s.tipo === "nota" ? "Appunto" : s.tipo === "link" ? "Link" : "Video",
+    titolo: s.titolo || "Senza titolo",
+    meta,
+    url: s.url || "",
+    nota: s.nota || "",
+    anteprima: s.anteprima || "",
+  };
+}
+
+function dataOggi() {
+  try { return new Date().toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" }); } catch (e) { return ""; }
+}
+
+function docSpunto(s, portieri) {
+  const v = vocePerSpunto(s, portieri, 0);
+  return { titolo: s.titolo || "Spunto", sottotitolo: "GK Mind · " + dataOggi(), nota: "", voci: [{ ...v, n: 0 }], sezioneVoci: "Spunto", collegamenti: [], piede: "GK Mind · " + (s.titolo || "Spunto"), nomeFile: s.titolo || "spunto" };
+}
+
+function docSelezione(sel, spunti, portieri) {
+  const dentro = (sel.spunti || []).map((id) => spunti.find((s) => s.id === id)).filter(Boolean);
+  return {
+    titolo: sel.nome, sottotitolo: "Selezione · " + dentro.length + (dentro.length === 1 ? " spunto" : " spunti") + " · " + dataOggi(),
+    nota: sel.nota || "", voci: dentro.map((s, i) => vocePerSpunto(s, portieri, i + 1)), sezioneVoci: "Spunti", collegamenti: [],
+    piede: "GK Mind · " + sel.nome, nomeFile: sel.nome,
+  };
+}
+
+function docPortiere(p, spuntiDi, portieri) {
+  return {
+    titolo: p.nome, sottotitolo: [p.anno ? "Annata " + p.anno : "", p.squadra, spuntiDi.length + (spuntiDi.length === 1 ? " spunto" : " spunti"), dataOggi()].filter(Boolean).join(" · "),
+    nota: p.note ? "Appunti: " + p.note : "", voci: spuntiDi.map((s, i) => vocePerSpunto(s, portieri, i + 1)), sezioneVoci: "Spunti collegati", collegamenti: [],
+    piede: "GK Mind · " + p.nome, nomeFile: p.nome,
+  };
+}
+
+function nomeElemento(e, spunti, portieri) {
+  if (e.tipo === "spunto") { const s = spunti.find((x) => x.id === e.rif); return s ? s.titolo || "Senza titolo" : "Spunto eliminato"; }
+  if (e.tipo === "portiere") { const p = portieri.find((x) => x.id === e.rif); return p ? p.nome : "Portiere eliminato"; }
+  return (e.testo || "").trim().replace(/\s+/g, " ").slice(0, 60) || (e.tipo === "titolo" ? "Titolo" : "Nota");
+}
+
+function docLavagna(lav, spunti, portieri) {
+  const el = (lav.elementi || []).slice().sort((a, b) => Math.round(a.y / 120) - Math.round(b.y / 120) || a.x - b.x);
+  const spuntiEl = el.filter((e) => e.tipo === "spunto").map((e) => spunti.find((s) => s.id === e.rif)).filter(Boolean);
+  const titoli = el.filter((e) => e.tipo === "titolo" && (e.testo || "").trim()).map((e) => e.testo.trim());
+  const note = el.filter((e) => e.tipo === "nota" && (e.testo || "").trim()).map((e) => "• " + e.testo.trim().replace(/\n+/g, " "));
+  const port = el.filter((e) => e.tipo === "portiere").map((e) => (portieri.find((p) => p.id === e.rif) || {}).nome).filter(Boolean);
+  const righe = [];
+  if (titoli.length) righe.push("Titoli: " + titoli.join(" / "));
+  if (port.length) righe.push("Portieri: " + port.join(", "));
+  if (note.length) { righe.push(""); righe.push("Note:"); note.forEach((n) => righe.push(n)); }
+  const colleg = (lav.collegamenti || []).map((c) => {
+    const a = el.find((e) => e.id === c.da), b = el.find((e) => e.id === c.a);
+    if (!a || !b) return null;
+    return { testo: nomeElemento(a, spunti, portieri) + " → " + nomeElemento(b, spunti, portieri) + (c.etichetta ? "  (" + c.etichetta + ")" : "") };
+  }).filter(Boolean);
+  return {
+    titolo: lav.nome || "Lavagna", sottotitolo: "Lavagna · " + el.length + " elementi · " + dataOggi(),
+    nota: righe.join("\n"), voci: spuntiEl.map((s, i) => vocePerSpunto(s, portieri, i + 1)), sezioneVoci: "Spunti sulla lavagna", collegamenti: colleg,
+    piede: "GK Mind · " + (lav.nome || "Lavagna"), nomeFile: lav.nome || "lavagna", conImmagine: el.length > 0,
+  };
+}
+
+// Testo per WhatsApp (con *grassetto*) o per email/copia.
+function documentoATesto(doc, perWhatsApp) {
+  const b = (t) => (perWhatsApp ? "*" + t + "*" : t);
+  const r = [b(doc.titolo)];
+  if (doc.sottotitolo) r.push(doc.sottotitolo);
+  if (doc.nota) { r.push(""); r.push(doc.nota); }
+  if (doc.voci && doc.voci.length) {
+    r.push(""); r.push(b(doc.sezioneVoci || "Elementi"));
+    doc.voci.forEach((v) => {
+      r.push("");
+      r.push((v.n ? v.n + ". " : "") + v.titolo);
+      const meta = [v.tipoEtichetta].concat(v.meta || []).filter(Boolean).join(" · ");
+      if (meta) r.push(meta);
+      if (v.url) r.push(v.url);
+      if (v.nota) r.push(v.nota);
+    });
+  }
+  if (doc.collegamenti && doc.collegamenti.length) {
+    r.push(""); r.push(b("Collegamenti"));
+    doc.collegamenti.forEach((c) => r.push("- " + c.testo));
+  }
+  r.push(""); r.push("— GK Mind");
+  return r.join("\n");
+}
+
+function nomeFileSicuro(t, estensione) {
+  const base = String(t || "gk-mind").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "gk-mind";
+  return "gk-mind-" + base + "." + estensione;
+}
+
+// ---------- immagini ----------
+function dataUrlAJpeg(dataUrl) {
+  const bin = atob(String(dataUrl).split(",")[1] || "");
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+
+// Carica un'immagine (solo se il sito la concede) e la porta a JPEG piccolo; se non si può, null.
+function jpegDaUrl(url, maxLato) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return; }
+    const img = new Image();
+    let finito = false;
+    const fine = (v) => { if (!finito) { finito = true; resolve(v); } };
+    const t = setTimeout(() => fine(null), 4000);
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      clearTimeout(t);
+      try {
+        const w0 = img.naturalWidth, h0 = img.naturalHeight;
+        if (!w0 || !h0) { fine(null); return; }
+        const sc = Math.min(1, maxLato / Math.max(w0, h0));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w0 * sc)); c.height = Math.max(1, Math.round(h0 * sc));
+        const g = c.getContext("2d");
+        g.fillStyle = "#ffffff"; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        fine({ jpeg: dataUrlAJpeg(c.toDataURL("image/jpeg", 0.8)), w: c.width, h: c.height, img });
+      } catch (e) { fine(null); }
+    };
+    img.onerror = () => { clearTimeout(t); fine(null); };
+    img.src = url;
+  });
+}
+
+function rettangoloArrotondato(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+
+function righeCanvas(g, testo, maxW, maxRighe) {
+  const righe = [];
+  String(testo || "").split("\n").forEach((par) => {
+    let corr = "";
+    par.split(" ").forEach((p) => {
+      const prova = corr ? corr + " " + p : p;
+      if (corr && g.measureText(prova).width > maxW) { righe.push(corr); corr = p; } else corr = prova;
+    });
+    righe.push(corr);
+  });
+  if (righe.length > maxRighe) { const r = righe.slice(0, maxRighe); r[maxRighe - 1] = r[maxRighe - 1].replace(/.{0,2}$/, "") + "…"; return r; }
+  return righe;
+}
+
+const COLORI_LAV_EXP = ["#d4af6a", "#6fb3e0", "#7fd49a", "#e08a8a", "#b99be0", "#e0c36f"];
+
+// Disegna la lavagna (ritagliata sul contenuto) e ne ricava un'immagine JPEG.
+async function disegnaLavagna(lav, spunti, portieri, misure) {
+  const el = lav.elementi || [];
+  if (!el.length) return null;
+  const larg = (e) => e.w || LAV_LARGHEZZE[e.tipo] || 200;
+  const alt = (e) => (misure && misure[e.id]) || (e.tipo === "spunto" ? 170 : e.tipo === "titolo" ? 44 : e.tipo === "portiere" ? 56 : 110);
+  const P = 40;
+  const minX = Math.min(...el.map((e) => e.x)) - P, minY = Math.min(...el.map((e) => e.y)) - P;
+  const maxX = Math.max(...el.map((e) => e.x + larg(e))) + P, maxY = Math.max(...el.map((e) => e.y + alt(e))) + P;
+  const W = maxX - minX, H = maxY - minY;
+  const sc = Math.min(2, 2400 / Math.max(W, H));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(W * sc)); c.height = Math.max(1, Math.round(H * sc));
+  const g = c.getContext("2d");
+  g.scale(sc, sc);
+  g.translate(-minX, -minY);
+  g.fillStyle = "#fbf8f1"; g.fillRect(minX, minY, W, H);
+  const miniature = {};
+  await Promise.all(el.filter((e) => e.tipo === "spunto").map(async (e) => {
+    const s = spunti.find((x) => x.id === e.rif);
+    if (s && s.anteprima) miniature[e.id] = await jpegDaUrl(s.anteprima, 360);
+  }));
+  const rett = (e) => ({ x: e.x, y: e.y, w: larg(e), h: alt(e) });
+  // frecce
+  const etichette = [];
+  (lav.collegamenti || []).forEach((l) => {
+    const a = el.find((e) => e.id === l.da), b = el.find((e) => e.id === l.a);
+    if (!a || !b) return;
+    const ra = rett(a), rb = rett(b);
+    const ca = { x: ra.x + ra.w / 2, y: ra.y + ra.h / 2 }, cb = { x: rb.x + rb.w / 2, y: rb.y + rb.h / 2 };
+    const clip = (r, da, verso) => {
+      const dx = verso.x - da.x, dy = verso.y - da.y;
+      const tx = dx ? (r.w / 2) / Math.abs(dx) : Infinity, ty = dy ? (r.h / 2) / Math.abs(dy) : Infinity;
+      const t = Math.min(tx, ty) + 0.01;
+      return { x: da.x + dx * t, y: da.y + dy * t };
+    };
+    const p1 = clip(ra, ca, cb), p2 = clip(rb, cb, ca);
+    g.strokeStyle = "#a8822f"; g.fillStyle = "#a8822f"; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(p1.x, p1.y); g.lineTo(p2.x, p2.y); g.stroke();
+    const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    g.beginPath(); g.moveTo(p2.x, p2.y);
+    g.lineTo(p2.x - 16 * Math.cos(ang - 0.4), p2.y - 16 * Math.sin(ang - 0.4));
+    g.lineTo(p2.x - 16 * Math.cos(ang + 0.4), p2.y - 16 * Math.sin(ang + 0.4));
+    g.closePath(); g.fill();
+    if (l.etichetta) etichette.push({ l, p1, p2 });
+  });
+  // elementi
+  el.forEach((e) => {
+    const r = rett(e);
+    g.save();
+    if (e.tipo === "titolo") {
+      g.fillStyle = "#1a1a1a"; g.font = "700 26px Helvetica, Arial, sans-serif"; g.textBaseline = "top";
+      righeCanvas(g, e.testo || "Titolo", r.w, 2).forEach((riga, i) => g.fillText(riga, r.x, r.y + 4 + i * 32));
+      g.restore(); return;
+    }
+    let colore = "#a8822f", sfondo = "#ffffff";
+    if (e.tipo === "nota") { colore = COLORI_LAV_EXP[(e.colore || 0) % COLORI_LAV_EXP.length]; sfondo = "#fffdf7"; }
+    if (e.tipo === "spunto") { colore = "#4a90c2"; }
+    if (e.tipo === "portiere") { colore = "#3f9d5f"; sfondo = "#f2fbf5"; }
+    rettangoloArrotondato(g, r.x, r.y, r.w, r.h, 12);
+    g.fillStyle = sfondo; g.fill(); g.lineWidth = 3; g.strokeStyle = colore; g.stroke();
+    g.beginPath(); rettangoloArrotondato(g, r.x, r.y, r.w, r.h, 12); g.clip();
+    g.textBaseline = "top"; g.fillStyle = "#222";
+    if (e.tipo === "nota") {
+      g.font = "400 18px Helvetica, Arial, sans-serif";
+      righeCanvas(g, e.testo || "", r.w - 24, Math.max(1, Math.floor((r.h - 20) / 24))).forEach((riga, i) => g.fillText(riga, r.x + 12, r.y + 12 + i * 24));
+    } else if (e.tipo === "portiere") {
+      const p = portieri.find((x) => x.id === e.rif);
+      g.font = "700 19px Helvetica, Arial, sans-serif";
+      righeCanvas(g, p ? p.nome : "Portiere eliminato", r.w - 24, 2).forEach((riga, i) => g.fillText(riga, r.x + 12, r.y + 12 + i * 24));
+      if (p && (p.anno || p.squadra) && r.h > 70) { g.font = "400 15px Helvetica, Arial, sans-serif"; g.fillStyle = "#666"; g.fillText([p.anno, p.squadra].filter(Boolean).join(" · "), r.x + 12, r.y + r.h - 26); }
+    } else if (e.tipo === "spunto") {
+      const s = spunti.find((x) => x.id === e.rif);
+      let y = r.y + 10;
+      const m = miniature[e.id];
+      if (m && m.img) {
+        const iw = r.w - 20, ih = Math.min(iw * 0.5625, r.h * 0.55);
+        g.save(); rettangoloArrotondato(g, r.x + 10, y, iw, ih, 8); g.clip();
+        const sx = Math.max(iw / m.img.naturalWidth, ih / m.img.naturalHeight);
+        g.drawImage(m.img, r.x + 10 + (iw - m.img.naturalWidth * sx) / 2, y + (ih - m.img.naturalHeight * sx) / 2, m.img.naturalWidth * sx, m.img.naturalHeight * sx);
+        g.restore(); y += ih + 8;
+      } else if (s && s.anteprima) {
+        g.fillStyle = "#e9eef3"; g.fillRect(r.x + 10, y, r.w - 20, 40); g.fillStyle = "#666"; g.font = "600 15px Helvetica, Arial, sans-serif"; g.fillText("▶ " + (s.tipo === "video" ? "video" : "immagine"), r.x + 18, y + 12); y += 48;
+      }
+      g.fillStyle = "#222"; g.font = "700 17px Helvetica, Arial, sans-serif";
+      righeCanvas(g, s ? s.titolo || "Senza titolo" : "Spunto eliminato", r.w - 20, Math.max(1, Math.floor((r.y + r.h - y - 8) / 22))).forEach((riga, i) => g.fillText(riga, r.x + 10, y + i * 22));
+    }
+    g.restore();
+  });
+  etichette.forEach(({ l, p1, p2 }) => {
+    g.font = "600 17px Helvetica, Arial, sans-serif";
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2, tw = g.measureText(l.etichetta).width;
+    g.fillStyle = "#fbf8f1"; g.fillRect(mx - tw / 2 - 5, my - 14, tw + 10, 24);
+    g.fillStyle = "#6b5217"; g.textAlign = "center"; g.textBaseline = "alphabetic"; g.fillText(l.etichetta, mx, my + 4); g.textAlign = "left";
+  });
+  return { jpeg: dataUrlAJpeg(c.toDataURL("image/jpeg", 0.88)), w: c.width, h: c.height, dataUrl: c.toDataURL("image/jpeg", 0.88) };
+}
+
+// Prepara il PDF: miniature degli spunti (se disponibili), immagine della lavagna, scrittura del file.
+async function preparaPdf(doc, immagineLavagna) {
+  const voci = [];
+  let conta = 0;
+  for (const v of doc.voci || []) {
+    let immagine = null;
+    if (v.anteprima && conta < 40) { const m = await jpegDaUrl(v.anteprima, 360); if (m) { immagine = { jpeg: m.jpeg, w: m.w, h: m.h }; conta++; } }
+    voci.push({ ...v, immagine });
+  }
+  const bytes = creaPdf({ ...doc, voci, immagine: immagineLavagna ? { jpeg: immagineLavagna.jpeg, w: immagineLavagna.w, h: immagineLavagna.h } : null });
+  return new Blob([bytes], { type: "application/pdf" });
+}
+
+// ---------- condivisione ----------
+function puoCondividereFile(file) {
+  try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { return false; }
+}
+
+function scaricaBlob(blob, nome) {
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+
+const LIMITE_MAIL = 1500;
+
+function ModaleCondividi({ doc, lavagna, onChiudi, avvisa }) {
+  const [pdf, setPdf] = useState(null);
+  const [img, setImg] = useState(null);
+  const [errore, setErrore] = useState("");
+  const [copiato, setCopiato] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const im = lavagna && doc.conImmagine ? await disegnaLavagna(lavagna.lav, lavagna.spunti, lavagna.portieri, lavagna.misure) : null;
+        if (!vivo) return;
+        if (im) setImg({ dataUrl: im.dataUrl, blob: dataUrlToBlob(im.dataUrl) });
+        const b = await preparaPdf(doc, im);
+        if (vivo) setPdf(b);
+      } catch (e) {
+        if (vivo) setErrore("Non riesco a preparare il PDF: " + (e && e.message ? e.message : "errore"));
+      }
+    })();
+    return () => { vivo = false; };
+  }, []);
+  const testoWa = documentoATesto(doc, true);
+  const testoMail = documentoATesto(doc, false);
+  const nomePdf = nomeFileSicuro(doc.nomeFile || doc.titolo, "pdf");
+  const nomeImg = nomeFileSicuro(doc.nomeFile || doc.titolo, "jpg");
+
+  const condividiFile = async (blob, nome, tipo) => {
+    const file = new File([blob], nome, { type: tipo });
+    if (puoCondividereFile(file)) {
+      try { await navigator.share({ files: [file], title: doc.titolo }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    scaricaBlob(blob, nome);
+    avvisa("File scaricato: ora puoi allegarlo a WhatsApp o all'email.");
+  };
+  const copia = async (t) => {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; }
+  };
+  const whatsapp = () => { window.open("https://wa.me/?text=" + encodeURIComponent(testoWa), "_blank", "noopener"); };
+  const email = async () => {
+    let corpo = testoMail;
+    if (corpo.length > LIMITE_MAIL) {
+      const ok = await copia(testoMail);
+      corpo = corpo.slice(0, LIMITE_MAIL).replace(/\n[^\n]*$/, "") + "\n\n[…] Elenco completo nel PDF allegato" + (ok ? " (il testo intero è negli appunti)." : ".");
+      avvisa("Il testo è lungo: nell'email trovi un riassunto. Allega anche il PDF.");
+    }
+    window.location.href = "mailto:?subject=" + encodeURIComponent(doc.titolo + " · GK Mind") + "&body=" + encodeURIComponent(corpo);
+  };
+  const copiaTesto = async () => {
+    const ok = await copia(testoMail);
+    if (ok) { setCopiato(true); setTimeout(() => setCopiato(false), 2000); } else avvisa("Non riesco a copiare: seleziona il testo e copialo a mano.");
+  };
+  const pronto = !!pdf;
+  return (
+    <Velo onChiudi={onChiudi} largo>
+      <div className="modale-testa">
+        <p className="modale-titolo">📤 Condividi “{doc.titolo}”</p>
+        <button className="btn icona" onClick={onChiudi} aria-label="Chiudi">✕</button>
+      </div>
+      {errore && <p className="avviso-campo">⚠️ {errore}</p>}
+      {!pronto && !errore && <p className="suggerimento">Preparo il PDF…</p>}
+      {img && <div className="anteprima-export"><img src={img.dataUrl} alt="Anteprima della lavagna" /></div>}
+      <div className="griglia-condividi">
+        <button className="btn primario" disabled={!pronto} onClick={() => condividiFile(pdf, nomePdf, "application/pdf")}>📄 Invia il PDF…<span className="sotto">WhatsApp, Mail, AirDrop, Messaggi</span></button>
+        <button className="btn" disabled={!pronto} onClick={() => scaricaBlob(pdf, nomePdf)}>⬇ Scarica il PDF</button>
+        {img && <button className="btn" onClick={() => condividiFile(img.blob, nomeImg, "image/jpeg")}>🖼 Invia come immagine…<span className="sotto">solo la lavagna</span></button>}
+        <button className="btn" onClick={whatsapp}>💬 Testo su WhatsApp<span className="sotto">apre WhatsApp con il riepilogo</span></button>
+        <button className="btn" onClick={email}>✉️ Testo in un'email<span className="sotto">si apre la tua app di posta</span></button>
+        <button className="btn" onClick={copiaTesto}>{copiato ? "✓ Copiato" : "📋 Copia il testo"}</button>
+      </div>
+      <p className="suggerimento">Il PDF contiene i link cliccabili, le anteprime e i collegamenti. Per mandarlo su WhatsApp o per email usa “Invia il PDF”; se il tuo dispositivo non lo permette, il file si scarica e lo allegherai a mano.</p>
+    </Velo>
+  );
+}
+
+// ============================================================
 //  GK MIND — lavagna di lavoro
 //  Note, titoli, spunti e portieri da spostare e collegare con frecce.
 // ============================================================
@@ -4796,7 +6545,7 @@ function LavagnaElenco({ titolo, voci, giaDentro, onAggiungi, onChiudi, vuoto })
   );
 }
 
-function Lavagna({ lavagne, lavagnaId, onScegli, spunti, portieri, onSalva, onElimina, onNuova, onApriSpunto, onApriPortiere, onConferma }) {
+function Lavagna({ lavagne, lavagnaId, onScegli, spunti, portieri, onSalva, onElimina, onNuova, onApriSpunto, onApriPortiere, onConferma, onCondividi }) {
   const lav = lavagne.find((l) => l.id === lavagnaId) || lavagne[0] || null;
   const vuota = { elementi: [], collegamenti: [] };
   const [dati, setDati] = useState(lav ? { elementi: lav.elementi || [], collegamenti: lav.collegamenti || [] } : vuota);
@@ -4873,7 +6622,7 @@ function Lavagna({ lavagne, lavagnaId, onScegli, spunti, portieri, onSalva, onEl
   };
 
   const giu = (ev, e) => {
-    if (ev.target.closest && ev.target.closest("textarea, input, select")) return;
+    if (ev.target.closest && ev.target.closest("textarea, input, select, button")) return;
     if (ev.button) return;
     const inizio = { x: ev.clientX, y: ev.clientY, ex: e.x, ey: e.y, mosso: false };
     const muovi = (m) => {
@@ -4974,6 +6723,7 @@ function Lavagna({ lavagne, lavagnaId, onScegli, spunti, portieri, onSalva, onEl
           <button className="btn piccolo" onClick={() => setZoom((z) => Math.max(0.4, Math.round((z - 0.1) * 10) / 10))} aria-label="Riduci">−</button>
           <span className="lav-zoom">{Math.round(zoom * 100)}%</span>
           <button className="btn piccolo" onClick={() => setZoom((z) => Math.min(1.6, Math.round((z + 0.1) * 10) / 10))} aria-label="Ingrandisci">+</button>
+          <button className="btn piccolo" disabled={el.length === 0} onClick={() => onCondividi({ ...lav, elementi: el, collegamenti: dati.collegamenti }, misure)}>📤 Condividi</button>
           <button className="btn piccolo" disabled={el.length < 2} onClick={() => onConferma("Riordinare tutti gli elementi in file ordinate? Le posizioni attuali verranno cambiate.", riordina, "Riordina")}>⤢ Riordina</button>
         </div>
         {collegaDa && (
@@ -5048,7 +6798,7 @@ function Lavagna({ lavagne, lavagnaId, onScegli, spunti, portieri, onSalva, onEl
                 const s = spuntoDi(e);
                 corpo = s ? (
                   <>
-                    {s.anteprima ? <div className="lav-img"><Img src={s.anteprima} alt={s.titolo} />{s.tipo === "video" && <span className="play">▶</span>}</div> : <div className="lav-img vuoto">{iconaTipo(s)}</div>}
+                    {s.anteprima ? <div className="lav-img"><Img src={s.anteprima} alt={s.titolo} /><PulsantePlay s={s} /></div> : <div className="lav-img vuoto">{iconaTipo(s)}</div>}
                     <p className="lav-titolo-sp">{s.titolo || "Senza titolo"}</p>
                     {s.fonte && <p className="card-meta">{s.fonte}</p>}
                   </>
@@ -5140,7 +6890,7 @@ function PortieriVista({ portieri, spunti, onApri, onNuovo, onSincronizza, onImp
   );
 }
 
-function PortiereScheda({ p, spuntiDi, onIndietro, onSalva, onElimina, onApriSpunto, onPreferito, onNuovoSpunto, onCollega, onScollega, onLavagna, onModifica }) {
+function PortiereScheda({ p, spuntiDi, onIndietro, onSalva, onElimina, onApriSpunto, onPreferito, onNuovoSpunto, onCollega, onScollega, onLavagna, onModifica, onCondividi }) {
   const [nota, setNota] = useState(p.note || "");
   useEffect(() => { setNota(p.note || ""); }, [p.id]);
   return (
@@ -5151,6 +6901,7 @@ function PortiereScheda({ p, spuntiDi, onIndietro, onSalva, onElimina, onApriSpu
         <p className="suggerimento">{[p.anno ? "Annata " + p.anno : "", p.squadra, p.origine ? "dal gestionale" : "inserito a mano"].filter(Boolean).join(" · ")}</p>
         <div className="azioni">
           <button className="btn piccolo" onClick={onLavagna}>🧠 Metti sulla lavagna</button>
+          <button className="btn piccolo" onClick={onCondividi}>📤 Condividi</button>
           <button className="btn piccolo" onClick={onModifica}>✎ Modifica</button>
           <button className="btn piccolo rosso" onClick={onElimina}>🗑 Elimina</button>
         </div>
@@ -5380,9 +7131,14 @@ function Home({ spunti, portieri, selezioni, lavagne, lavagnaCorrente, onVai, on
       </Widget>
 
       <Widget titolo="🎯 Aree di lavoro">
-        <div className="chips fitto">
-          {areeDisponibili.map((a) => <button key={a} className="chip" onClick={() => onArea(a)}>{a} ({conta(a)})</button>)}
-        </div>
+        {gruppiAree(areeDisponibili).map((g) => (
+          <div key={g.nome}>
+            <p className="gruppo-etichetta">{g.nome}</p>
+            <div className="chips fitto">
+              {g.aree.map((a) => <button key={a} className="chip" onClick={() => onArea(a)}>{a} ({conta(a)})</button>)}
+            </div>
+          </div>
+        ))}
       </Widget>
 
       <Widget titolo="★ Preferiti" azione="Tutti →" onAzione={() => onVai({ tipo: "preferiti" })}>
@@ -5434,13 +7190,44 @@ function settoreDi(id) {
   return SETTORI.find((x) => x.id === id) || null;
 }
 
+function PulsantePlay({ s, className }) {
+  const guarda = React.useContext(ContestoGuarda);
+  const info = s.tipo === "video" ? analizzaLink(s.url) : null;
+  if (s.tipo !== "video") return null;
+  if (!guarda || !info || !info.embed) return <span className={"play" + (className ? " " + className : "")}>▶</span>;
+  return <button className={"play attivo" + (className ? " " + className : "")} aria-label="Guarda il video" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); guarda(s); }}>▶</button>;
+}
+
+function PlayerVelo({ s, onChiudi }) {
+  const info = analizzaLink(s.url);
+  return (
+    <Velo onChiudi={onChiudi} largo>
+      <div className="modale-testa">
+        <p className="modale-titolo">🎬 {s.titolo || "Video"}</p>
+        <button className="btn icona" onClick={onChiudi} aria-label="Chiudi">✕</button>
+      </div>
+      {info && info.embed ? (
+        <div className={"player" + (info.verticale ? " verticale" : "")}>
+          <iframe title={s.titolo || "video"} src={embedAutoplay(info)} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+        </div>
+      ) : <p className="vuoto-msg">Per questo link non c'è un lettore: usa “Apri l'originale”.</p>}
+      {s.nota && <p className="dettaglio-nota">{s.nota}</p>}
+      <div className="azioni">
+        {s.url && <a className="btn" href={s.url} target="_blank" rel="noopener noreferrer">↗ Apri su {info && info.nome ? info.nome : "il sito"}</a>}
+        <button className="btn" onClick={onChiudi}>Chiudi</button>
+      </div>
+      {info && (info.piattaforma === "instagram" || info.piattaforma === "tiktok") && <p className="suggerimento">Se il video non parte (succede con i profili privati), apri l'originale: puoi salvare uno screenshot come anteprima.</p>}
+    </Velo>
+  );
+}
+
 function Scheda({ s, onApri, onPreferito, extra }) {
   return (
     <div className="card" role="button" tabIndex={0} onClick={() => onApri(s.id)} onKeyDown={(e) => { if (e.key === "Enter") onApri(s.id); }}>
       {s.anteprima ? (
         <div className="card-img">
           <Img src={s.anteprima} alt={s.titolo} />
-          {s.tipo === "video" && <span className="play">▶</span>}
+          <PulsantePlay s={s} />
         </div>
       ) : (
         <div className="card-vuoto">{iconaTipo(s)}</div>
@@ -5475,7 +7262,7 @@ function Velo({ onChiudi, children, largo }) {
   );
 }
 
-function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, onPreferito, onToggleSelezione, onNuovaSelezione, onMettiLavagna, onApriPortiere }) {
+function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, onPreferito, onToggleSelezione, onNuovaSelezione, onMettiLavagna, onApriPortiere, onCondividi }) {
   const info = analizzaLink(s.url);
   const [riproduci, setRiproduci] = useState(false);
   const [menuSel, setMenuSel] = useState(false);
@@ -5489,7 +7276,7 @@ function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, on
       </div>
       {info && info.embed && riproduci ? (
         <div className={"player" + (verticale ? " verticale" : "")}>
-          <iframe title={s.titolo || "video"} src={info.embed} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+          <iframe title={s.titolo || "video"} src={embedAutoplay(info)} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
         </div>
       ) : s.anteprima ? (
         <div className="player-anteprima" onClick={() => info && info.embed && setRiproduci(true)} style={{ cursor: info && info.embed ? "pointer" : "default" }}>
@@ -5516,6 +7303,7 @@ function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, on
         <button className="btn" onClick={() => onPreferito(s)}>{s.preferito ? "★ Nei preferiti" : "☆ Metti nei preferiti"}</button>
         <button className="btn" onClick={() => setMenuSel((v) => !v)}>📂 Selezioni</button>
         <button className="btn" onClick={() => onMettiLavagna(s)}>🧠 Metti sulla lavagna</button>
+        <button className="btn" onClick={() => onCondividi(s)}>📤 Condividi</button>
         <button className="btn" onClick={() => onModifica(s)}>✎ Modifica</button>
         <button className="btn rosso" onClick={() => onElimina(s)}>🗑 Elimina</button>
       </div>
@@ -5550,6 +7338,7 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
   const [nuovaArea, setNuovaArea] = useState("");
   const [areeExtra, setAreeExtra] = useState([]);
   const [fileVideo, setFileVideo] = useState(false);
+  const [provaVideo, setProvaVideo] = useState(false);
   const info = useMemo(() => analizzaLink(f.url), [f.url]);
   const infoUrl = info ? info.url : "";
 
@@ -5618,6 +7407,21 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
     }
     setStato("");
   };
+  // Cmd+V di uno screenshot o trascinamento di un'immagine dentro il modulo.
+  const daAppunti = (e) => {
+    const files = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((x) => /^image\//.test(x.type));
+    if (files.length) { e.preventDefault(); scegliImmagine(files[0]); }
+  };
+  const daTrascinamento = (e) => {
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    const im = files.find((x) => /^image\//.test(x.type)), vd = files.find((x) => /^video\//.test(x.type));
+    if (im) { e.preventDefault(); scegliImmagine(im); }
+    else if (vd) { e.preventDefault(); scegliVideo(vd); }
+    else {
+      const t = e.dataTransfer && (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain"));
+      if (t && /^https?:\/\//i.test(t.trim())) { e.preventDefault(); setF((x) => ({ ...x, url: t.trim().split("\n")[0] })); }
+    }
+  };
   const toggleArea = (a) => setF((x) => ({ ...x, aree: x.aree.includes(a) ? x.aree.filter((y) => y !== a) : [...x.aree, a] }));
   const aggiungiArea = () => {
     const n = nuovaArea.trim();
@@ -5667,6 +7471,7 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
 
   return (
     <Velo onChiudi={onAnnulla} largo>
+      <div onPasteCapture={daAppunti} onDragOver={(e) => e.preventDefault()} onDrop={daTrascinamento}>
       <div className="modale-testa">
         <p className="modale-titolo">{f.id ? "Modifica spunto" : "Nuovo spunto"}</p>
         <button className="btn icona" onClick={onAnnulla} aria-label="Chiudi">✕</button>
@@ -5677,7 +7482,17 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
         <input className="campo-in" placeholder="incolla qui il link" value={f.url} onChange={(e) => setF((x) => ({ ...x, url: e.target.value }))} />
         <button className="btn piccolo" onClick={incolla}>📋 Incolla</button>
       </div>
-      {info && <p className="suggerimento">Riconosciuto: <strong>{info.nome}</strong>{info.embed ? " · si potrà guardare dentro l'app" : ""}</p>}
+      {info && <p className="suggerimento">Riconosciuto: <strong>{info.nome}</strong>{info.embed ? " · il video si guarda direttamente nell'app" : ""}</p>}
+      {info && info.embed && (
+        provaVideo ? (
+          <div className={"player" + (info.verticale ? " verticale" : "")}>
+            <iframe title="anteprima video" src={embedAutoplay(info)} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+          </div>
+        ) : (
+          <button className="btn piccolo" onClick={() => setProvaVideo(true)}>▶ Guarda il video qui</button>
+        )
+      )}
+      {info && (info.piattaforma === "instagram" || info.piattaforma === "tiktok") && <p className="suggerimento">Instagram e TikTok non danno l'immagine del video: fai uno screenshot e incollalo qui (Cmd+V) o trascinalo, così hai l'anteprima nelle schede.</p>}
 
       <div className="riga-file">
         <label className="btn piccolo">📷 Screenshot o immagine<input type="file" accept="image/*" hidden onChange={(e) => { scegliImmagine(e.target.files[0]); e.target.value = ""; }} /></label>
@@ -5724,11 +7539,14 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
       )}
 
       <label className="etichetta">Aree di lavoro</label>
-      <div className="chips fitto">
-        {tutteLeAree.map((a) => (
-          <button key={a} className={"chip" + (f.aree.includes(a) ? " attivo" : "")} onClick={() => toggleArea(a)}>{a}</button>
-        ))}
-      </div>
+      {gruppiAree(tutteLeAree).map((g) => (
+        <div key={g.nome}>
+          <p className="gruppo-etichetta">{g.nome}</p>
+          <div className="chips fitto">
+            {g.aree.map((a) => <button key={a} className={"chip" + (f.aree.includes(a) ? " attivo" : "")} onClick={() => toggleArea(a)}>{a}</button>)}
+          </div>
+        </div>
+      ))}
       <div className="riga-nuova">
         <input className="campo-in" placeholder="Un'altra area…" value={nuovaArea} onChange={(e) => setNuovaArea(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") aggiungiArea(); }} />
         <button className="btn piccolo" disabled={!nuovaArea.trim()} onClick={aggiungiArea}>+ Aggiungi</button>
@@ -5743,6 +7561,7 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
       <div className="azioni">
         <button className="btn primario" disabled={!haContenuto || salvataggio} onClick={salva}>{salvataggio ? "Salvo…" : f.id ? "Salva modifiche" : "Salva"}</button>
         <button className="btn" onClick={onAnnulla}>Annulla</button>
+      </div>
       </div>
     </Velo>
   );
@@ -5786,7 +7605,7 @@ function SelezioniLista({ selezioni, spunti, onApri, onNuova }) {
   );
 }
 
-function SelezioneDettaglio({ sel, spunti, onApriSpunto, onPreferito, onSalva, onElimina, onTogli, onSposta, onAggiungi }) {
+function SelezioneDettaglio({ sel, spunti, onApriSpunto, onPreferito, onSalva, onElimina, onTogli, onSposta, onAggiungi, onCondividi }) {
   const [rinomina, setRinomina] = useState(false);
   const [nomeTmp, setNomeTmp] = useState(sel.nome);
   const [notaTmp, setNotaTmp] = useState(sel.nota || "");
@@ -5805,6 +7624,7 @@ function SelezioneDettaglio({ sel, spunti, onApriSpunto, onPreferito, onSalva, o
           <>
             <h2 className="sel-nome">📂 {sel.nome}</h2>
             <div className="azioni">
+              <button className="btn piccolo" disabled={dentro.length === 0 && !sel.nota} onClick={onCondividi}>📤 Condividi</button>
               <button className="btn piccolo" onClick={() => { setNomeTmp(sel.nome); setRinomina(true); }}>✎ Rinomina</button>
               <button className="btn piccolo rosso" onClick={() => onElimina(sel)}>🗑 Elimina selezione</button>
             </div>
@@ -6003,8 +7823,11 @@ function App() {
   const [vista, setVista] = useState({ tipo: "home" });
   const [ricerca, setRicerca] = useState("");
   const [fonteFiltro, setFonteFiltro] = useState("");
-  const [areaFiltro, setAreaFiltro] = useState("");
+  const [areaFiltro, setAreaFiltro] = useState([]);
+  const [areePannello, setAreePannello] = useState(false);
   const [apertoId, setApertoId] = useState(null);
+  const [guardaSpunto, setGuardaSpunto] = useState(null);
+  const [condividi, setCondividi] = useState(null);
   const [form, setForm] = useState(null);
   const [formPortiere, setFormPortiere] = useState(null);
   const [sincronizzaAperta, setSincronizzaAperta] = useState(false);
@@ -6025,7 +7848,14 @@ function App() {
   const caricaDa = async (s) => {
     try {
       const d = await s.carica();
-      setSpunti(d.spunti);
+      const spuntiAggiornati = d.spunti.map((x) => {
+        const aree = x.aree || [];
+        if (!aree.some((a) => AREE_RINOMINATE[a])) return x;
+        const n = { ...x, aree: Array.from(new Set(aree.map((a) => AREE_RINOMINATE[a] || a))), modificato_il: adesso() };
+        s.salvaSpunto(n).catch(() => {});
+        return n;
+      });
+      setSpunti(spuntiAggiornati);
       setSelezioni(d.selezioni);
       setPortieri(d.portieri || []);
       setLavagne(d.lavagne || []);
@@ -6300,7 +8130,7 @@ function App() {
   }, [spunti, vista]);
   const visibili = useMemo(() => {
     let l = vistaElenco ? base : spunti;
-    if (areaFiltro) l = l.filter((s) => (s.aree || []).includes(areaFiltro));
+    if (areaFiltro.length) l = l.filter((s) => areaFiltro.every((a) => (s.aree || []).includes(a)));
     if (fonteFiltro) l = l.filter((s) => s.fonte === fonteFiltro);
     if (qq) l = l.filter((s) => pulisci([s.titolo, s.nota, s.fonte, s.url, (s.aree || []).join(" "), (settoreDi(s.settore) || {}).nome || "", (s.portieri || []).map((id) => (portieri.find((p) => p.id === id) || {}).nome || "").join(" ")].join(" ")).includes(qq));
     return l.slice().sort((a, b) => (b.creato_il || "").localeCompare(a.creato_il || ""));
@@ -6310,7 +8140,8 @@ function App() {
   const selezioneAperta = vista.tipo === "selezione" ? selezioni.find((x) => x.id === vista.id) : null;
   const portiereAperto = vista.tipo === "portiere" ? portieri.find((x) => x.id === vista.id) : null;
   const spuntiDelPortiere = portiereAperto ? spunti.filter((s) => (s.portieri || []).includes(portiereAperto.id)).sort((a, b) => (b.creato_il || "").localeCompare(a.creato_il || "")) : [];
-  const vai = (v) => { setVista(v); setRicerca(""); setFonteFiltro(""); setAreaFiltro(""); };
+  const vai = (v) => { setVista(v); setRicerca(""); setFonteFiltro(""); setAreaFiltro([]); setAreePannello(false); };
+  const toggleAreaFiltro = (a) => setAreaFiltro((l) => (l.includes(a) ? l.filter((x) => x !== a) : [...l, a]));
   const apriNuovo = () => setForm({ settore: vista.tipo === "settore" ? vista.valore : "", portieri: vista.tipo === "portiere" && portiereAperto ? [portiereAperto.id] : [] });
   const chiudiForm = () => setForm(null);
   const apriPortiere = (id) => { setApertoId(null); vai({ tipo: "portiere", id }); };
@@ -6347,6 +8178,7 @@ function App() {
   const avvisoSchema = tabelleMancanti.length > 0 ? "Al database mancano le tabelle per " + tabelleMancanti.join(" e ") + ": esegui di nuovo il file database-spunti.sql in Supabase." : "";
 
   return (
+    <ContestoGuarda.Provider value={(s) => setGuardaSpunto(s)}>
     <div className="app">
       <header className="testa">
         <div className="testa-riga">
@@ -6367,9 +8199,23 @@ function App() {
         {mostraElenco && (
           <>
             <nav className="chips aree-riga">
-              {chip(!areaFiltro, "Tutte le aree", () => setAreaFiltro(""), "area-tutte")}
-              {areeDisponibili.map((a) => chip(areaFiltro === a, a + " (" + (vistaElenco ? base : spunti).filter((s) => (s.aree || []).includes(a)).length + ")", () => setAreaFiltro(areaFiltro === a ? "" : a), "area-" + a))}
+              {chip(areaFiltro.length > 0 || areePannello, "🎯 Aree" + (areaFiltro.length ? " (" + areaFiltro.length + ")" : "") + (areePannello ? " ▴" : " ▾"), () => setAreePannello((v) => !v), "aree-apri")}
+              {areaFiltro.map((a) => <button key={"sel-" + a} className="chip attivo" onClick={() => toggleAreaFiltro(a)}>{a} ✕</button>)}
+              {areaFiltro.length > 0 && <button className="chip" onClick={() => setAreaFiltro([])}>Azzera</button>}
             </nav>
+            {areePannello && (
+              <div className="aree-pannello">
+                <p className="suggerimento">Scegli una o più aree: per incrociarle, per esempio Atletico + Tuffo.</p>
+                {gruppiAree(areeDisponibili).map((g) => (
+                  <div key={g.nome}>
+                    <p className="gruppo-etichetta">{g.nome}</p>
+                    <div className="chips fitto">
+                      {g.aree.map((a) => <button key={a} className={"chip" + (areaFiltro.includes(a) ? " attivo" : "")} onClick={() => toggleAreaFiltro(a)}>{a} ({(vistaElenco ? base : spunti).filter((s) => (s.aree || []).includes(a)).length})</button>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {fonti.length > 0 && (
               <select className="campo-in filtro-fonte" value={fonteFiltro} onChange={(e) => setFonteFiltro(e.target.value)}>
                 <option value="">Tutte le fonti</option>
@@ -6388,7 +8234,7 @@ function App() {
           <Home
             spunti={spunti} portieri={portieri} selezioni={selezioni} lavagne={lavagne} lavagnaCorrente={lavagnaCorrente()}
             areeDisponibili={areeDisponibili}
-            onVai={vai} onArea={(a) => { vai({ tipo: "tutti" }); setAreaFiltro(a); }}
+            onVai={vai} onArea={(a) => { vai({ tipo: "tutti" }); setAreaFiltro([a]); }}
             onApriSpunto={setApertoId} onPreferito={preferito} onApriPortiere={apriPortiere}
             onNotaVeloce={creaNotaVeloce} onLinkVeloce={(u) => setForm({ url: u, settore: "", portieri: [] })}
             onSincronizza={() => setSincronizzaAperta(true)}
@@ -6401,6 +8247,7 @@ function App() {
             spunti={spunti} portieri={portieri}
             onSalva={salvaLavagna} onNuova={nuovaLavagna} onElimina={eliminaLavagna}
             onApriSpunto={setApertoId} onApriPortiere={apriPortiere} onConferma={chiedi}
+            onCondividi={(lav, misure) => setCondividi({ doc: docLavagna(lav, spunti, portieri), lavagna: { lav, spunti, portieri, misure } })}
           />
         )}
 
@@ -6426,6 +8273,7 @@ function App() {
             onCollega={() => setCollegaPortiereId(portiereAperto.id)}
             onScollega={(s) => togliPortiereDaSpunto(s, portiereAperto.id)}
             onLavagna={() => mettiSuLavagna("portiere", portiereAperto.id)}
+            onCondividi={() => setCondividi({ doc: docPortiere(portiereAperto, spuntiDelPortiere, portieri) })}
           />
         )}
         {vista.tipo === "portiere" && !qq && !portiereAperto && <p className="vuoto-msg">Portiere non trovato.</p>}
@@ -6444,6 +8292,7 @@ function App() {
               onElimina={(x) => chiedi('Eliminare la selezione "' + x.nome + '"? Gli spunti al suo interno non vengono cancellati.', () => eliminaSelezione(x))}
               onTogli={toggleInSelezione} onSposta={spostaInSelezione}
               onAggiungi={() => setSceglispunti(true)}
+              onCondividi={() => setCondividi({ doc: docSelezione(selezioneAperta, spunti, portieri) })}
             />
           </>
         )}
@@ -6474,6 +8323,7 @@ function App() {
           onNuovaSelezione={(nome, spuntoId) => creaSelezione(nome, spuntoId)}
           onMettiLavagna={(s) => mettiSuLavagna("spunto", s.id)}
           onApriPortiere={apriPortiere}
+          onCondividi={(s) => setCondividi({ doc: docSpunto(s, portieri) })}
         />
       )}
 
@@ -6529,8 +8379,12 @@ function App() {
         </Velo>
       )}
 
+      {guardaSpunto && <PlayerVelo s={guardaSpunto} onChiudi={() => setGuardaSpunto(null)} />}
+      {condividi && <ModaleCondividi doc={condividi.doc} lavagna={condividi.lavagna} avvisa={avvisa} onChiudi={() => setCondividi(null)} />}
+
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
+    </ContestoGuarda.Provider>
   );
 }
 
