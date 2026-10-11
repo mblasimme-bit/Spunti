@@ -226,6 +226,8 @@ textarea.campo-in { resize: vertical; min-height: 80px; line-height: 1.4; }
 .griglia-condividi .sotto { font-size: 11px; font-weight: 400; opacity: 0.7; }
 .anteprima-export { max-height: 240px; overflow: hidden; border-radius: 10px; background: #fbf8f1; margin-bottom: 8px; display: flex; justify-content: center; }
 .anteprima-export img { max-width: 100%; max-height: 240px; object-fit: contain; }
+.video-salvato { width: 100%; max-height: 70vh; border-radius: 12px; background: #000; margin-bottom: 12px; }
+.video-salvato.verticale { max-width: 360px; display: block; margin-left: auto; margin-right: auto; }
 
 </style>
 </head>
@@ -539,7 +541,7 @@ const {
   useMemo,
   useRef
 } = React;
-const VERSIONE = "GK Mind v3 · 10 ott 2026";
+const VERSIONE = "GK Mind v4 · 11 ott 2026";
 const NOME_APP = "GK Mind";
 const SETTORI = [{
   id: "colleghi",
@@ -1170,6 +1172,207 @@ function creaStoreCloud(cfg) {
       } catch (e) {}
     }
   };
+}
+const VIDEO_DB = "gkmind-video";
+const VIDEO_STORE = "video";
+function apriVideoDb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("Questo browser non può salvare video."));
+      return;
+    }
+    const r = indexedDB.open(VIDEO_DB, 1);
+    r.onupgradeneeded = () => {
+      r.result.createObjectStore(VIDEO_STORE);
+    };
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error || new Error("Memoria video non disponibile."));
+  });
+}
+function conDb(modo, fn) {
+  return apriVideoDb().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction(VIDEO_STORE, modo);
+    const st = t.objectStore(VIDEO_STORE);
+    let esito;
+    const q = fn(st);
+    if (q) q.onsuccess = () => {
+      esito = q.result;
+    };
+    t.oncomplete = () => {
+      db.close();
+      resolve(esito);
+    };
+    t.onerror = () => {
+      db.close();
+      reject(t.error || new Error("Salvataggio non riuscito."));
+    };
+    t.onabort = () => {
+      db.close();
+      reject(t.error || new Error("Spazio insufficiente o salvataggio annullato."));
+    };
+  }));
+}
+const salvaVideoBlob = (id, blob) => conDb("readwrite", st => st.put(blob, id));
+const leggiVideoBlob = id => conDb("readonly", st => st.get(id));
+const eliminaVideoBlob = id => conDb("readwrite", st => st.delete(id)).catch(() => {});
+async function chiediMemoriaStabile() {
+  try {
+    if (navigator.storage && navigator.storage.persist) return await navigator.storage.persist();
+  } catch (e) {}
+  return false;
+}
+async function statoMemoria() {
+  try {
+    const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
+    const p = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    return {
+      usato: e ? e.usage || 0 : 0,
+      quota: e ? e.quota || 0 : 0,
+      stabile: p
+    };
+  } catch (err) {
+    return {
+      usato: 0,
+      quota: 0,
+      stabile: false
+    };
+  }
+}
+function pesoLeggibile(b) {
+  if (b >= 1e9) return (b / 1e9).toFixed(1) + " GB";
+  if (b >= 1e6) return Math.round(b / 1e6) + " MB";
+  return Math.max(1, Math.round(b / 1e3)) + " KB";
+}
+const TAVOLA_CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ c >>> 1 : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+async function crcBlob(blob) {
+  let crc = 0xffffffff;
+  const pezzo = 4 * 1024 * 1024;
+  for (let i = 0; i < blob.size; i += pezzo) {
+    const a = new Uint8Array(await blob.slice(i, i + pezzo).arrayBuffer());
+    for (let j = 0; j < a.length; j++) crc = TAVOLA_CRC[(crc ^ a[j]) & 255] ^ crc >>> 8;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function u16(n) {
+  return new Uint8Array([n & 255, n >>> 8 & 255]);
+}
+function u32(n) {
+  return new Uint8Array([n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 & 255]);
+}
+function codifica(t) {
+  return new TextEncoder().encode(t);
+}
+async function creaZip(file) {
+  const parti = [];
+  const centrale = [];
+  let pos = 0;
+  const ora = new Date();
+  const dosOra = ora.getHours() << 11 | ora.getMinutes() << 5 | ora.getSeconds() >> 1;
+  const dosData = ora.getFullYear() - 1980 << 9 | ora.getMonth() + 1 << 5 | ora.getDate();
+  for (const f of file) {
+    if (f.blob.size >= 0xffffffff) throw new Error("Un video supera i 4 GB e non entra nella copia.");
+    const nome = codifica(f.nome);
+    const crc = await crcBlob(f.blob);
+    const testa = [u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(dosOra), u16(dosData), u32(crc), u32(f.blob.size), u32(f.blob.size), u16(nome.length), u16(0), nome];
+    testa.forEach(x => parti.push(x));
+    parti.push(f.blob);
+    const lenTesta = 30 + nome.length;
+    centrale.push([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(dosOra), u16(dosData), u32(crc), u32(f.blob.size), u32(f.blob.size), u16(nome.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(pos), nome]);
+    pos += lenTesta + f.blob.size;
+  }
+  let dimCentrale = 0;
+  centrale.forEach(voce => voce.forEach(x => {
+    parti.push(x);
+    dimCentrale += x.length;
+  }));
+  [u32(0x06054b50), u16(0), u16(0), u16(file.length), u16(file.length), u32(dimCentrale), u32(pos), u16(0)].forEach(x => parti.push(x));
+  return new Blob(parti, {
+    type: "application/zip"
+  });
+}
+async function leggiZip(fileZip) {
+  const coda = new Uint8Array(await fileZip.slice(Math.max(0, fileZip.size - 66000)).arrayBuffer());
+  let e = -1;
+  for (let i = coda.length - 22; i >= 0; i--) {
+    if (coda[i] === 0x50 && coda[i + 1] === 0x4b && coda[i + 2] === 5 && coda[i + 3] === 6) {
+      e = i;
+      break;
+    }
+  }
+  if (e < 0) throw new Error("Questo non sembra un file di copia di GK Mind.");
+  const dv = new DataView(coda.buffer);
+  const n = dv.getUint16(e + 10, true),
+    dim = dv.getUint32(e + 12, true),
+    inizio = dv.getUint32(e + 16, true);
+  const cd = new DataView(await fileZip.slice(inizio, inizio + dim).arrayBuffer());
+  const esiti = [];
+  let p = 0;
+  for (let i = 0; i < n; i++) {
+    if (cd.getUint32(p, true) !== 0x02014b50) throw new Error("File di copia danneggiato.");
+    const metodo = cd.getUint16(p + 10, true),
+      size = cd.getUint32(p + 24, true),
+      ln = cd.getUint16(p + 28, true),
+      le = cd.getUint16(p + 30, true),
+      lc = cd.getUint16(p + 32, true),
+      off = cd.getUint32(p + 42, true);
+    const nome = new TextDecoder().decode(new Uint8Array(cd.buffer, p + 46, ln));
+    if (metodo !== 0) throw new Error("Questo file è stato compresso da un altro programma: usa la copia fatta da GK Mind.");
+    const h = new DataView(await fileZip.slice(off, off + 30).arrayBuffer());
+    const dati = off + 30 + h.getUint16(26, true) + h.getUint16(28, true);
+    esiti.push({
+      nome,
+      blob: fileZip.slice(dati, dati + size)
+    });
+    p += 46 + ln + le + lc;
+  }
+  return esiti;
+}
+function VideoSalvato({
+  id,
+  verticale
+}) {
+  const [url, setUrl] = useState("");
+  const [errore, setErrore] = useState("");
+  useEffect(() => {
+    let vivo = true,
+      u = "";
+    leggiVideoBlob(id).then(b => {
+      if (!vivo) return;
+      if (!b) {
+        setErrore("Il video non è più in questa memoria (su un altro browser o dopo una pulizia). Puoi ripristinarlo dalla copia di sicurezza.");
+        return;
+      }
+      u = URL.createObjectURL(b);
+      setUrl(u);
+    }).catch(e => {
+      if (vivo) setErrore(e.message || "Non riesco ad aprire il video.");
+    });
+    return () => {
+      vivo = false;
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [id]);
+  if (errore) return React.createElement("p", {
+    className: "avviso-box"
+  }, errore);
+  if (!url) return React.createElement("p", {
+    className: "suggerimento"
+  }, "Apro il video…");
+  return React.createElement("video", {
+    className: "video-salvato" + (verticale ? " verticale" : ""),
+    src: url,
+    controls: true,
+    autoPlay: true,
+    playsInline: true
+  });
 }
 const PDF_LARGH_HELV = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
 const PDF_WIN = {
@@ -3438,7 +3641,7 @@ function PulsantePlay({
   const guarda = React.useContext(ContestoGuarda);
   const info = s.tipo === "video" ? analizzaLink(s.url) : null;
   if (s.tipo !== "video") return null;
-  if (!guarda || !info || !info.embed) return React.createElement("span", {
+  if (!guarda || !(info && info.embed || s.video_id)) return React.createElement("span", {
     className: "play" + (className ? " " + className : "")
   }, "▶");
   return React.createElement("button", {
@@ -3467,7 +3670,9 @@ function PlayerVelo({
     className: "btn icona",
     onClick: onChiudi,
     "aria-label": "Chiudi"
-  }, "✕")), info && info.embed ? React.createElement("div", {
+  }, "✕")), s.video_id ? React.createElement(VideoSalvato, {
+    id: s.video_id
+  }) : info && info.embed ? React.createElement("div", {
     className: "player" + (info.verticale ? " verticale" : "")
   }, React.createElement("iframe", {
     title: s.titolo || "video",
@@ -3598,7 +3803,9 @@ function Dettaglio({
     className: "btn icona",
     onClick: onChiudi,
     "aria-label": "Chiudi"
-  }, "✕")), info && info.embed && riproduci ? React.createElement("div", {
+  }, "✕")), s.video_id && riproduci ? React.createElement(VideoSalvato, {
+    id: s.video_id
+  }) : info && info.embed && riproduci ? React.createElement("div", {
     className: "player" + (verticale ? " verticale" : "")
   }, React.createElement("iframe", {
     title: s.titolo || "video",
@@ -3607,18 +3814,18 @@ function Dettaglio({
     allowFullScreen: true
   })) : s.anteprima ? React.createElement("div", {
     className: "player-anteprima",
-    onClick: () => info && info.embed && setRiproduci(true),
+    onClick: () => (s.video_id || info && info.embed) && setRiproduci(true),
     style: {
-      cursor: info && info.embed ? "pointer" : "default"
+      cursor: s.video_id || info && info.embed ? "pointer" : "default"
     }
   }, React.createElement(Img, {
     src: s.anteprima,
     alt: s.titolo
-  }), info && info.embed && React.createElement("button", {
+  }), (s.video_id || info && info.embed) && React.createElement("button", {
     className: "play grande",
     "aria-label": "Guarda il video",
     onClick: () => setRiproduci(true)
-  }, "▶")) : info && info.embed ? React.createElement("button", {
+  }, "▶")) : s.video_id || info && info.embed ? React.createElement("button", {
     className: "btn",
     onClick: () => setRiproduci(true)
   }, "▶ Guarda qui") : null, React.createElement("div", {
@@ -3735,6 +3942,9 @@ function FormSpunto({
   const [areeExtra, setAreeExtra] = useState([]);
   const [fileVideo, setFileVideo] = useState(false);
   const [provaVideo, setProvaVideo] = useState(false);
+  const [videoFile, setVideoFile] = useState(null);
+  const [togliVideo, setTogliVideo] = useState(false);
+  const locale = store.modo === "locale";
   const info = useMemo(() => analizzaLink(f.url), [f.url]);
   const infoUrl = info ? info.url : "";
   useEffect(() => {
@@ -3764,7 +3974,7 @@ function FormSpunto({
     return Array.from(s);
   }, [areeDisponibili, areeExtra, f.aree]);
   const anteprimaMostrata = immagine ? immagine.dataUrl : togliAnteprima ? null : f.anteprima || info && info.anteprima || null;
-  const haContenuto = !!(f.url.trim() || immagine || anteprimaMostrata || f.titolo.trim() || f.nota.trim());
+  const haContenuto = !!(videoFile || f.url.trim() || immagine || anteprimaMostrata || f.titolo.trim() || f.nota.trim());
   const maxLato = store.modo === "locale" ? 520 : 720;
   const qualita = store.modo === "locale" ? 0.6 : 0.72;
   const incolla = async () => {
@@ -3793,13 +4003,22 @@ function FormSpunto({
   const scegliVideo = async file => {
     if (!file) return;
     setStato("Ricavo l'anteprima dal video…");
+    if (locale) {
+      setVideoFile(file);
+      setTogliVideo(false);
+      setFileVideo(true);
+    }
     try {
       setImmagine(await fotogrammaDaVideo(file, maxLato, qualita));
       setTogliAnteprima(false);
       setFileVideo(true);
-      avvisa("Salvo solo un'immagine di anteprima: il video resta nel tuo rullino.");
+      if (locale) {
+        setVideoFile(file);
+        setTogliVideo(false);
+        avvisa("Il video verrà salvato in GK Mind, su questo dispositivo.");
+      } else avvisa("Salvo solo un'immagine di anteprima: il video resta nel tuo rullino.");
     } catch (e) {
-      avvisa("⚠️ " + (e.message || "Non riesco a ricavare l'anteprima.") + " Prova con uno screenshot.");
+      avvisa(locale ? "Il video verrà salvato, ma non riesco a ricavarne l'anteprima: puoi aggiungere uno screenshot." : "⚠️ " + (e.message || "Non riesco a ricavare l'anteprima.") + " Prova con uno screenshot.");
     }
     setStato("");
   };
@@ -3862,8 +4081,21 @@ function FormSpunto({
         path = null;
       }
       const url = info ? info.url : "";
+      let videoId = f.video_id || "";
+      let videoNome = f.video_nome || "";
+      if (togliVideo && videoId && !videoFile) {
+        await eliminaVideoBlob(videoId);
+        videoId = "";
+        videoNome = "";
+      }
+      if (videoFile && locale) {
+        if (!videoId) videoId = uid();
+        await salvaVideoBlob(videoId, videoFile);
+        videoNome = videoFile.name || "video";
+        chiediMemoriaStabile();
+      }
       const fileUrl = f.file_url && f.file_url.trim() ? normalizzaUrl(f.file_url) : "";
-      const tipo = info ? tipoDaLink(info) : fileUrl ? "video" : fileVideo ? "video" : anteprima ? "immagine" : "nota";
+      const tipo = info ? tipoDaLink(info) : fileUrl || videoId || fileVideo ? "video" : fileVideo ? "video" : anteprima ? "immagine" : "nota";
       const titolo = f.titolo.trim() || (info ? info.nome : "") || f.nota.trim().slice(0, 40) || "Senza titolo";
       onSalva({
         id: f.id || uid(),
@@ -3871,6 +4103,8 @@ function FormSpunto({
         titolo,
         url,
         file_url: fileUrl,
+        video_id: videoId,
+        video_nome: videoNome,
         nota: f.nota.trim(),
         fonte: f.fonte.trim(),
         aree: f.aree,
@@ -3945,7 +4179,7 @@ function FormSpunto({
     }
   })), React.createElement("label", {
     className: "btn piccolo"
-  }, "🎞 Registrazione schermo", React.createElement("input", {
+  }, locale ? "🎞 Video da salvare qui" : "🎞 Registrazione schermo", React.createElement("input", {
     type: "file",
     accept: "video/*",
     hidden: true,
@@ -3953,9 +4187,18 @@ function FormSpunto({
       scegliVideo(e.target.files[0]);
       e.target.value = "";
     }
-  }))), React.createElement("p", {
+  }))), locale ? React.createElement("p", {
     className: "suggerimento"
-  }, "Per un video registrato salvo solo una piccola immagine: il file resta nel rullino e non occupa spazio."), anteprimaMostrata && React.createElement("div", {
+  }, "Il video viene salvato dentro GK Mind, su questo Mac, e si guarda con ▶. Ricava da solo l'anteprima.") : React.createElement("p", {
+    className: "suggerimento"
+  }, "Per un video registrato salvo solo una piccola immagine: il file resta nel rullino e non occupa spazio."), videoFile && React.createElement("p", {
+    className: "suggerimento"
+  }, "🎞 Da salvare: ", React.createElement("strong", null, videoFile.name), " (", pesoLeggibile(videoFile.size), ")"), !videoFile && f.video_id && !togliVideo && React.createElement("p", {
+    className: "suggerimento"
+  }, "🎞 Video salvato: ", f.video_nome || "video", " ", React.createElement("button", {
+    className: "btn piccolo rosso",
+    onClick: () => setTogliVideo(true)
+  }, "Togli il video")), anteprimaMostrata && React.createElement("div", {
     className: "anteprima-form"
   }, React.createElement(Img, {
     src: anteprimaMostrata,
@@ -4339,8 +4582,15 @@ function Impostazioni({
   onPassaOnline,
   onTornaProva,
   onSincronizza,
-  avviso
+  avviso,
+  nVideo,
+  onCopiaVideo,
+  onRipristinaVideo
 }) {
+  const [mem, setMem] = useState(null);
+  useEffect(() => {
+    statoMemoria().then(setMem);
+  }, []);
   const [url, setUrl] = useState("");
   const [chiave, setChiave] = useState("");
   const [copiato, setCopiato] = useState(false);
@@ -4430,6 +4680,30 @@ function Impostazioni({
     hidden: true,
     onChange: e => {
       onImporta(e.target.files[0]);
+      e.target.value = "";
+    }
+  })))), store.modo === "locale" && React.createElement("div", {
+    className: "blocco"
+  }, React.createElement("p", {
+    className: "blocco-titolo"
+  }, "Video salvati in GK Mind"), React.createElement("p", {
+    className: "suggerimento"
+  }, nVideo, " ", nVideo === 1 ? "video" : "video", " salvati su questo dispositivo", mem && mem.usato ? " · memoria usata dall'app: " + pesoLeggibile(mem.usato) : "", ".", mem && mem.stabile ? " Il browser ha promesso di non cancellarli." : ""), !(mem && mem.stabile) && React.createElement("p", {
+    className: "avviso-box"
+  }, "Safari può cancellare i dati dei siti che non usi da tempo. Per proteggere i video: aggiungi GK Mind al Dock (Safari → File → Aggiungi al Dock) e fai ogni tanto la copia di sicurezza qui sotto, da tenere su iCloud Drive."), React.createElement("div", {
+    className: "azioni"
+  }, React.createElement("button", {
+    className: "btn",
+    disabled: !nVideo,
+    onClick: onCopiaVideo
+  }, "⬇ Copia di sicurezza dei video (.zip)"), React.createElement("label", {
+    className: "btn"
+  }, "⬆ Ripristina i video da una copia", React.createElement("input", {
+    type: "file",
+    accept: ".zip,application/zip",
+    hidden: true,
+    onChange: e => {
+      onRipristinaVideo(e.target.files[0]);
       e.target.value = "";
     }
   })))), React.createElement("div", {
@@ -4802,6 +5076,7 @@ function App() {
     try {
       await store.eliminaSpunto(s.id);
       if (s.anteprima_path) store.eliminaImmagine(s.anteprima_path);
+      if (s.video_id) eliminaVideoBlob(s.video_id);
       for (const x of toccate) await store.salvaSelezione({
         ...x,
         spunti: x.spunti.filter(id => id !== s.id),
@@ -4970,6 +5245,54 @@ function App() {
     onSi,
     etichetta: etichetta || "Elimina"
   });
+  const copiaVideo = async () => {
+    try {
+      avvisa("Preparo la copia dei video… può volerci un po'.");
+      const file = [];
+      for (const s of spunti.filter(x => x.video_id)) {
+        const b = await leggiVideoBlob(s.video_id);
+        if (!b) continue;
+        const est = ((s.video_nome || "").match(/\.([a-z0-9]{2,4})$/i) || [, "mp4"])[1].toLowerCase();
+        const base = (s.titolo || "video").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "video";
+        file.push({
+          nome: base + "__" + s.video_id + "." + est,
+          blob: b
+        });
+      }
+      if (!file.length) {
+        avvisa("Non ci sono video da copiare in questa memoria.");
+        return;
+      }
+      scaricaBlob(await creaZip(file), "gk-mind-video-" + oggiIso() + ".zip");
+      avvisa("Copia scaricata: " + file.length + (file.length === 1 ? " video." : " video."));
+    } catch (e) {
+      avvisa("⚠️ Copia non riuscita: " + e.message);
+    }
+  };
+  const ripristinaVideo = async fileZip => {
+    if (!fileZip) return;
+    try {
+      const voci = await leggiZip(fileZip);
+      let n = 0;
+      for (const v of voci) {
+        const m = v.nome.match(/__([0-9a-fA-F-]{36})\.([a-z0-9]+)$/i);
+        if (!m) continue;
+        const tipo = {
+          mov: "video/quicktime",
+          mp4: "video/mp4",
+          m4v: "video/mp4",
+          webm: "video/webm"
+        }[m[2].toLowerCase()] || "video/mp4";
+        await salvaVideoBlob(m[1], new Blob([v.blob], {
+          type: tipo
+        }));
+        n++;
+      }
+      avvisa(n ? "Ripristinati " + n + (n === 1 ? " video." : " video.") : "Nella copia non ho trovato video riconoscibili.");
+    } catch (e) {
+      avvisa("⚠️ " + e.message);
+    }
+  };
   const esporta = () => {
     scaricaFile("gk-mind-backup-" + oggiIso() + ".json", JSON.stringify({
       versione: 2,
@@ -5437,6 +5760,9 @@ function App() {
     datiLocaliPresenti: datiLocaliPresenti,
     avviso: avvisoSchema,
     onChiudi: () => setImpostazioniAperte(false),
+    nVideo: spunti.filter(x => x.video_id).length,
+    onCopiaVideo: copiaVideo,
+    onRipristinaVideo: ripristinaVideo,
     onEsporta: esporta,
     onImporta: importaDaFile,
     onSincronizza: () => {
@@ -5507,7 +5833,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 //  GK MIND — funzioni di base
 // ============================================================
 const { useState, useEffect, useLayoutEffect, useMemo, useRef } = React;
-const VERSIONE = "GK Mind v3 · 10 ott 2026";
+const VERSIONE = "GK Mind v4 · 11 ott 2026";
 const NOME_APP = "GK Mind";
 // Settori in cui si dividono gli spunti (i portieri hanno una sezione tutta loro).
 const SETTORI = [
@@ -5956,6 +6282,142 @@ function creaStoreCloud(cfg) {
       try { await chiama("/storage/v1/object/anteprime/" + path, { method: "DELETE" }); } catch (e) {}
     },
   };
+}
+
+// ============================================================
+//  GK MIND — video salvati nella memoria del browser (solo su questo dispositivo)
+//  Archivio IndexedDB + copia di sicurezza in un file .zip (senza compressione).
+// ============================================================
+const VIDEO_DB = "gkmind-video";
+const VIDEO_STORE = "video";
+
+function apriVideoDb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") { reject(new Error("Questo browser non può salvare video.")); return; }
+    const r = indexedDB.open(VIDEO_DB, 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore(VIDEO_STORE); };
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error || new Error("Memoria video non disponibile."));
+  });
+}
+function conDb(modo, fn) {
+  return apriVideoDb().then((db) => new Promise((resolve, reject) => {
+    const t = db.transaction(VIDEO_STORE, modo);
+    const st = t.objectStore(VIDEO_STORE);
+    let esito;
+    const q = fn(st);
+    if (q) q.onsuccess = () => { esito = q.result; };
+    t.oncomplete = () => { db.close(); resolve(esito); };
+    t.onerror = () => { db.close(); reject(t.error || new Error("Salvataggio non riuscito.")); };
+    t.onabort = () => { db.close(); reject(t.error || new Error("Spazio insufficiente o salvataggio annullato.")); };
+  }));
+}
+const salvaVideoBlob = (id, blob) => conDb("readwrite", (st) => st.put(blob, id));
+const leggiVideoBlob = (id) => conDb("readonly", (st) => st.get(id));
+const eliminaVideoBlob = (id) => conDb("readwrite", (st) => st.delete(id)).catch(() => {});
+
+// Chiede al browser di non cancellare i video quando serve spazio (non sempre concesso).
+async function chiediMemoriaStabile() {
+  try { if (navigator.storage && navigator.storage.persist) return await navigator.storage.persist(); } catch (e) {}
+  return false;
+}
+async function statoMemoria() {
+  try {
+    const e = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
+    const p = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    return { usato: e ? e.usage || 0 : 0, quota: e ? e.quota || 0 : 0, stabile: p };
+  } catch (err) { return { usato: 0, quota: 0, stabile: false }; }
+}
+function pesoLeggibile(b) {
+  if (b >= 1e9) return (b / 1e9).toFixed(1) + " GB";
+  if (b >= 1e6) return Math.round(b / 1e6) + " MB";
+  return Math.max(1, Math.round(b / 1e3)) + " KB";
+}
+
+// ---------- zip senza compressione ----------
+const TAVOLA_CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+async function crcBlob(blob) {
+  let crc = 0xffffffff;
+  const pezzo = 4 * 1024 * 1024;
+  for (let i = 0; i < blob.size; i += pezzo) {
+    const a = new Uint8Array(await blob.slice(i, i + pezzo).arrayBuffer());
+    for (let j = 0; j < a.length; j++) crc = TAVOLA_CRC[(crc ^ a[j]) & 255] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function u16(n) { return new Uint8Array([n & 255, (n >>> 8) & 255]); }
+function u32(n) { return new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]); }
+function codifica(t) { return new TextEncoder().encode(t); }
+
+// file: [{nome, blob}] → Blob .zip (ogni file sotto 4 GB, al massimo 65000 file)
+async function creaZip(file) {
+  const parti = [];
+  const centrale = [];
+  let pos = 0;
+  const ora = new Date();
+  const dosOra = (ora.getHours() << 11) | (ora.getMinutes() << 5) | (ora.getSeconds() >> 1);
+  const dosData = ((ora.getFullYear() - 1980) << 9) | ((ora.getMonth() + 1) << 5) | ora.getDate();
+  for (const f of file) {
+    if (f.blob.size >= 0xffffffff) throw new Error("Un video supera i 4 GB e non entra nella copia.");
+    const nome = codifica(f.nome);
+    const crc = await crcBlob(f.blob);
+    const testa = [u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(dosOra), u16(dosData), u32(crc), u32(f.blob.size), u32(f.blob.size), u16(nome.length), u16(0), nome];
+    testa.forEach((x) => parti.push(x));
+    parti.push(f.blob);
+    const lenTesta = 30 + nome.length;
+    centrale.push([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(dosOra), u16(dosData), u32(crc), u32(f.blob.size), u32(f.blob.size), u16(nome.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(pos), nome]);
+    pos += lenTesta + f.blob.size;
+  }
+  let dimCentrale = 0;
+  centrale.forEach((voce) => voce.forEach((x) => { parti.push(x); dimCentrale += x.length; }));
+  [u32(0x06054b50), u16(0), u16(0), u16(file.length), u16(file.length), u32(dimCentrale), u32(pos), u16(0)].forEach((x) => parti.push(x));
+  return new Blob(parti, { type: "application/zip" });
+}
+
+// Legge uno zip creato da GK Mind (senza compressione). → [{nome, blob}]
+async function leggiZip(fileZip) {
+  const coda = new Uint8Array(await fileZip.slice(Math.max(0, fileZip.size - 66000)).arrayBuffer());
+  let e = -1;
+  for (let i = coda.length - 22; i >= 0; i--) { if (coda[i] === 0x50 && coda[i + 1] === 0x4b && coda[i + 2] === 5 && coda[i + 3] === 6) { e = i; break; } }
+  if (e < 0) throw new Error("Questo non sembra un file di copia di GK Mind.");
+  const dv = new DataView(coda.buffer);
+  const n = dv.getUint16(e + 10, true), dim = dv.getUint32(e + 12, true), inizio = dv.getUint32(e + 16, true);
+  const cd = new DataView(await fileZip.slice(inizio, inizio + dim).arrayBuffer());
+  const esiti = [];
+  let p = 0;
+  for (let i = 0; i < n; i++) {
+    if (cd.getUint32(p, true) !== 0x02014b50) throw new Error("File di copia danneggiato.");
+    const metodo = cd.getUint16(p + 10, true), size = cd.getUint32(p + 24, true), ln = cd.getUint16(p + 28, true), le = cd.getUint16(p + 30, true), lc = cd.getUint16(p + 32, true), off = cd.getUint32(p + 42, true);
+    const nome = new TextDecoder().decode(new Uint8Array(cd.buffer, p + 46, ln));
+    if (metodo !== 0) throw new Error("Questo file è stato compresso da un altro programma: usa la copia fatta da GK Mind.");
+    const h = new DataView(await fileZip.slice(off, off + 30).arrayBuffer());
+    const dati = off + 30 + h.getUint16(26, true) + h.getUint16(28, true);
+    esiti.push({ nome, blob: fileZip.slice(dati, dati + size) });
+    p += 46 + ln + le + lc;
+  }
+  return esiti;
+}
+
+// Lettore: mette il video salvato in un <video>.
+function VideoSalvato({ id, verticale }) {
+  const [url, setUrl] = useState("");
+  const [errore, setErrore] = useState("");
+  useEffect(() => {
+    let vivo = true, u = "";
+    leggiVideoBlob(id).then((b) => {
+      if (!vivo) return;
+      if (!b) { setErrore("Il video non è più in questa memoria (su un altro browser o dopo una pulizia). Puoi ripristinarlo dalla copia di sicurezza."); return; }
+      u = URL.createObjectURL(b); setUrl(u);
+    }).catch((e) => { if (vivo) setErrore(e.message || "Non riesco ad aprire il video."); });
+    return () => { vivo = false; if (u) URL.revokeObjectURL(u); };
+  }, [id]);
+  if (errore) return <p className="avviso-box">{errore}</p>;
+  if (!url) return <p className="suggerimento">Apro il video…</p>;
+  return <video className={"video-salvato" + (verticale ? " verticale" : "")} src={url} controls autoPlay playsInline />;
 }
 
 // ============================================================
@@ -7221,7 +7683,7 @@ function PulsantePlay({ s, className }) {
   const guarda = React.useContext(ContestoGuarda);
   const info = s.tipo === "video" ? analizzaLink(s.url) : null;
   if (s.tipo !== "video") return null;
-  if (!guarda || !info || !info.embed) return <span className={"play" + (className ? " " + className : "")}>▶</span>;
+  if (!guarda || !((info && info.embed) || s.video_id)) return <span className={"play" + (className ? " " + className : "")}>▶</span>;
   return <button className={"play attivo" + (className ? " " + className : "")} aria-label="Guarda il video" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); guarda(s); }}>▶</button>;
 }
 
@@ -7233,7 +7695,7 @@ function PlayerVelo({ s, onChiudi }) {
         <p className="modale-titolo">🎬 {s.titolo || "Video"}</p>
         <button className="btn icona" onClick={onChiudi} aria-label="Chiudi">✕</button>
       </div>
-      {info && info.embed ? (
+      {s.video_id ? <VideoSalvato id={s.video_id} /> : info && info.embed ? (
         <div className={"player" + (info.verticale ? " verticale" : "")}>
           <iframe title={s.titolo || "video"} src={embedAutoplay(info)} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
         </div>
@@ -7303,16 +7765,18 @@ function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, on
         <p className="modale-titolo">{iconaTipo(s)} {s.titolo || "Senza titolo"}</p>
         <button className="btn icona" onClick={onChiudi} aria-label="Chiudi">✕</button>
       </div>
-      {info && info.embed && riproduci ? (
+      {s.video_id && riproduci ? (
+        <VideoSalvato id={s.video_id} />
+      ) : info && info.embed && riproduci ? (
         <div className={"player" + (verticale ? " verticale" : "")}>
           <iframe title={s.titolo || "video"} src={embedAutoplay(info)} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
         </div>
       ) : s.anteprima ? (
-        <div className="player-anteprima" onClick={() => info && info.embed && setRiproduci(true)} style={{ cursor: info && info.embed ? "pointer" : "default" }}>
+        <div className="player-anteprima" onClick={() => (s.video_id || (info && info.embed)) && setRiproduci(true)} style={{ cursor: s.video_id || (info && info.embed) ? "pointer" : "default" }}>
           <Img src={s.anteprima} alt={s.titolo} />
-          {info && info.embed && <button className="play grande" aria-label="Guarda il video" onClick={() => setRiproduci(true)}>▶</button>}
+          {(s.video_id || (info && info.embed)) && <button className="play grande" aria-label="Guarda il video" onClick={() => setRiproduci(true)}>▶</button>}
         </div>
-      ) : info && info.embed ? (
+      ) : s.video_id || (info && info.embed) ? (
         <button className="btn" onClick={() => setRiproduci(true)}>▶ Guarda qui</button>
       ) : null}
       <div className="dettaglio-meta">
@@ -7369,6 +7833,9 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
   const [areeExtra, setAreeExtra] = useState([]);
   const [fileVideo, setFileVideo] = useState(false);
   const [provaVideo, setProvaVideo] = useState(false);
+  const [videoFile, setVideoFile] = useState(null);
+  const [togliVideo, setTogliVideo] = useState(false);
+  const locale = store.modo === "locale";
   const info = useMemo(() => analizzaLink(f.url), [f.url]);
   const infoUrl = info ? info.url : "";
 
@@ -7399,7 +7866,7 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
   }, [areeDisponibili, areeExtra, f.aree]);
 
   const anteprimaMostrata = immagine ? immagine.dataUrl : togliAnteprima ? null : f.anteprima || (info && info.anteprima) || null;
-  const haContenuto = !!(f.url.trim() || immagine || anteprimaMostrata || f.titolo.trim() || f.nota.trim());
+  const haContenuto = !!(videoFile || f.url.trim() || immagine || anteprimaMostrata || f.titolo.trim() || f.nota.trim());
   const maxLato = store.modo === "locale" ? 520 : 720;
   const qualita = store.modo === "locale" ? 0.6 : 0.72;
 
@@ -7427,13 +7894,15 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
   const scegliVideo = async (file) => {
     if (!file) return;
     setStato("Ricavo l'anteprima dal video…");
+    if (locale) { setVideoFile(file); setTogliVideo(false); setFileVideo(true); }
     try {
       setImmagine(await fotogrammaDaVideo(file, maxLato, qualita));
       setTogliAnteprima(false);
       setFileVideo(true);
-      avvisa("Salvo solo un'immagine di anteprima: il video resta nel tuo rullino.");
+      if (locale) { setVideoFile(file); setTogliVideo(false); avvisa("Il video verrà salvato in GK Mind, su questo dispositivo."); }
+      else avvisa("Salvo solo un'immagine di anteprima: il video resta nel tuo rullino.");
     } catch (e) {
-      avvisa("⚠️ " + (e.message || "Non riesco a ricavare l'anteprima.") + " Prova con uno screenshot.");
+      avvisa(locale ? "Il video verrà salvato, ma non riesco a ricavarne l'anteprima: puoi aggiungere uno screenshot." : "⚠️ " + (e.message || "Non riesco a ricavare l'anteprima.") + " Prova con uno screenshot.");
     }
     setStato("");
   };
@@ -7478,12 +7947,21 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
         path = null;
       }
       const url = info ? info.url : "";
+      let videoId = f.video_id || "";
+      let videoNome = f.video_nome || "";
+      if (togliVideo && videoId && !videoFile) { await eliminaVideoBlob(videoId); videoId = ""; videoNome = ""; }
+      if (videoFile && locale) {
+        if (!videoId) videoId = uid();
+        await salvaVideoBlob(videoId, videoFile);
+        videoNome = videoFile.name || "video";
+        chiediMemoriaStabile();
+      }
       const fileUrl = f.file_url && f.file_url.trim() ? normalizzaUrl(f.file_url) : "";
-      const tipo = info ? tipoDaLink(info) : fileUrl ? "video" : fileVideo ? "video" : anteprima ? "immagine" : "nota";
+      const tipo = info ? tipoDaLink(info) : fileUrl || videoId || fileVideo ? "video" : fileVideo ? "video" : anteprima ? "immagine" : "nota";
       const titolo = f.titolo.trim() || (info ? info.nome : "") || f.nota.trim().slice(0, 40) || "Senza titolo";
       onSalva({
         id: f.id || uid(),
-        tipo, titolo, url, file_url: fileUrl,
+        tipo, titolo, url, file_url: fileUrl, video_id: videoId, video_nome: videoNome,
         nota: f.nota.trim(),
         fonte: f.fonte.trim(),
         aree: f.aree,
@@ -7527,9 +8005,17 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
 
       <div className="riga-file">
         <label className="btn piccolo">📷 Screenshot o immagine<input type="file" accept="image/*" hidden onChange={(e) => { scegliImmagine(e.target.files[0]); e.target.value = ""; }} /></label>
-        <label className="btn piccolo">🎞 Registrazione schermo<input type="file" accept="video/*" hidden onChange={(e) => { scegliVideo(e.target.files[0]); e.target.value = ""; }} /></label>
+        <label className="btn piccolo">{locale ? "🎞 Video da salvare qui" : "🎞 Registrazione schermo"}<input type="file" accept="video/*" hidden onChange={(e) => { scegliVideo(e.target.files[0]); e.target.value = ""; }} /></label>
       </div>
-      <p className="suggerimento">Per un video registrato salvo solo una piccola immagine: il file resta nel rullino e non occupa spazio.</p>
+      {locale ? (
+        <p className="suggerimento">Il video viene salvato dentro GK Mind, su questo Mac, e si guarda con ▶. Ricava da solo l'anteprima.</p>
+      ) : (
+        <p className="suggerimento">Per un video registrato salvo solo una piccola immagine: il file resta nel rullino e non occupa spazio.</p>
+      )}
+      {videoFile && <p className="suggerimento">🎞 Da salvare: <strong>{videoFile.name}</strong> ({pesoLeggibile(videoFile.size)})</p>}
+      {!videoFile && f.video_id && !togliVideo && (
+        <p className="suggerimento">🎞 Video salvato: {f.video_nome || "video"} <button className="btn piccolo rosso" onClick={() => setTogliVideo(true)}>Togli il video</button></p>
+      )}
 
       {anteprimaMostrata && (
         <div className="anteprima-form">
@@ -7714,7 +8200,9 @@ function ScegliSpunti({ sel, spunti, onToggle, onChiudi }) {
   );
 }
 
-function Impostazioni({ store, conteggi, datiLocaliPresenti, onChiudi, onEsporta, onImporta, onTrasferisciLocali, onEsci, onPassaOnline, onTornaProva, onSincronizza, avviso }) {
+function Impostazioni({ store, conteggi, datiLocaliPresenti, onChiudi, onEsporta, onImporta, onTrasferisciLocali, onEsci, onPassaOnline, onTornaProva, onSincronizza, avviso, nVideo, onCopiaVideo, onRipristinaVideo }) {
+  const [mem, setMem] = useState(null);
+  useEffect(() => { statoMemoria().then(setMem); }, []);
   const [url, setUrl] = useState("");
   const [chiave, setChiave] = useState("");
   const [copiato, setCopiato] = useState(false);
@@ -7767,6 +8255,17 @@ function Impostazioni({ store, conteggi, datiLocaliPresenti, onChiudi, onEsporta
           <label className="btn">⬆ Importa da file<input type="file" accept="application/json,.json" hidden onChange={(e) => { onImporta(e.target.files[0]); e.target.value = ""; }} /></label>
         </div>
       </div>
+      {store.modo === "locale" && (
+        <div className="blocco">
+          <p className="blocco-titolo">Video salvati in GK Mind</p>
+          <p className="suggerimento">{nVideo} {nVideo === 1 ? "video" : "video"} salvati su questo dispositivo{mem && mem.usato ? " · memoria usata dall'app: " + pesoLeggibile(mem.usato) : ""}.{mem && mem.stabile ? " Il browser ha promesso di non cancellarli." : ""}</p>
+          {!(mem && mem.stabile) && <p className="avviso-box">Safari può cancellare i dati dei siti che non usi da tempo. Per proteggere i video: aggiungi GK Mind al Dock (Safari → File → Aggiungi al Dock) e fai ogni tanto la copia di sicurezza qui sotto, da tenere su iCloud Drive.</p>}
+          <div className="azioni">
+            <button className="btn" disabled={!nVideo} onClick={onCopiaVideo}>⬇ Copia di sicurezza dei video (.zip)</button>
+            <label className="btn">⬆ Ripristina i video da una copia<input type="file" accept=".zip,application/zip" hidden onChange={(e) => { onRipristinaVideo(e.target.files[0]); e.target.value = ""; }} /></label>
+          </div>
+        </div>
+      )}
       <div className="blocco">
         <p className="blocco-titolo">Salvare al volo dal Mac</p>
         <p className="suggerimento">Trascina questo pulsante nella barra dei preferiti di Safari. Quando sei su un video, cliccalo: si apre GK Mind con il link già pronto.</p>
@@ -8020,6 +8519,7 @@ function App() {
     try {
       await store.eliminaSpunto(s.id);
       if (s.anteprima_path) store.eliminaImmagine(s.anteprima_path);
+      if (s.video_id) eliminaVideoBlob(s.video_id);
       for (const x of toccate) await store.salvaSelezione({ ...x, spunti: x.spunti.filter((id) => id !== s.id), modificato_il: adesso() });
     } catch (e) { avvisa("⚠️ Non eliminato: " + e.message); ricarica(); }
   };
@@ -8102,6 +8602,38 @@ function App() {
   };
 
   const chiedi = (testo, onSi, etichetta) => setConferma({ testo, onSi, etichetta: etichetta || "Elimina" });
+
+  const copiaVideo = async () => {
+    try {
+      avvisa("Preparo la copia dei video… può volerci un po'.");
+      const file = [];
+      for (const s of spunti.filter((x) => x.video_id)) {
+        const b = await leggiVideoBlob(s.video_id);
+        if (!b) continue;
+        const est = ((s.video_nome || "").match(/\.([a-z0-9]{2,4})$/i) || [, "mp4"])[1].toLowerCase();
+        const base = (s.titolo || "video").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "video";
+        file.push({ nome: base + "__" + s.video_id + "." + est, blob: b });
+      }
+      if (!file.length) { avvisa("Non ci sono video da copiare in questa memoria."); return; }
+      scaricaBlob(await creaZip(file), "gk-mind-video-" + oggiIso() + ".zip");
+      avvisa("Copia scaricata: " + file.length + (file.length === 1 ? " video." : " video."));
+    } catch (e) { avvisa("⚠️ Copia non riuscita: " + e.message); }
+  };
+  const ripristinaVideo = async (fileZip) => {
+    if (!fileZip) return;
+    try {
+      const voci = await leggiZip(fileZip);
+      let n = 0;
+      for (const v of voci) {
+        const m = v.nome.match(/__([0-9a-fA-F-]{36})\.([a-z0-9]+)$/i);
+        if (!m) continue;
+        const tipo = { mov: "video/quicktime", mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm" }[m[2].toLowerCase()] || "video/mp4";
+        await salvaVideoBlob(m[1], new Blob([v.blob], { type: tipo }));
+        n++;
+      }
+      avvisa(n ? "Ripristinati " + n + (n === 1 ? " video." : " video.") : "Nella copia non ho trovato video riconoscibili.");
+    } catch (e) { avvisa("⚠️ " + e.message); }
+  };
 
   // ---------- salvataggio di sicurezza ----------
   const esporta = () => {
@@ -8395,6 +8927,7 @@ function App() {
         <Impostazioni
           store={store} conteggi={{ spunti: spunti.length, selezioni: selezioni.length, portieri: portieri.length, lavagne: lavagne.length }} datiLocaliPresenti={datiLocaliPresenti} avviso={avvisoSchema}
           onChiudi={() => setImpostazioniAperte(false)}
+          nVideo={spunti.filter((x) => x.video_id).length} onCopiaVideo={copiaVideo} onRipristinaVideo={ripristinaVideo}
           onEsporta={esporta} onImporta={importaDaFile}
           onSincronizza={() => { setImpostazioniAperte(false); setSincronizzaAperta(true); }}
           onTrasferisciLocali={async () => { await importaDati(leggiDatiLocali()); }}
