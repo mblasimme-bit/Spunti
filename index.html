@@ -1494,7 +1494,7 @@ function vocePerSpunto(s, portieri, n) {
     tipoEtichetta: info && info.nome && info.piattaforma !== "web" ? info.nome : s.tipo === "immagine" ? "Immagine" : s.tipo === "nota" ? "Appunto" : s.tipo === "link" ? "Link" : "Video",
     titolo: s.titolo || "Senza titolo",
     meta,
-    url: s.url || "",
+    url: s.url || s.file_url || "",
     nota: s.nota || "",
     anteprima: s.anteprima || ""
   };
@@ -3480,7 +3480,12 @@ function PlayerVelo({
     className: "dettaglio-nota"
   }, s.nota), React.createElement("div", {
     className: "azioni"
-  }, s.url && React.createElement("a", {
+  }, s.file_url && React.createElement("a", {
+    className: "btn primario",
+    href: s.file_url,
+    target: "_blank",
+    rel: "noopener noreferrer"
+  }, "▶ Apri il video salvato"), s.url && React.createElement("a", {
     className: "btn",
     href: s.url,
     target: "_blank",
@@ -3523,7 +3528,9 @@ function Scheda({
     className: "card-nota"
   }, s.nota), s.fonte && React.createElement("p", {
     className: "card-meta"
-  }, s.fonte), settoreDi(s.settore) && React.createElement("p", {
+  }, s.fonte), s.file_url && React.createElement("p", {
+    className: "card-meta"
+  }, "☁️ Video salvato"), settoreDi(s.settore) && React.createElement("p", {
     className: "card-meta"
   }, settoreDi(s.settore).icona, " ", settoreDi(s.settore).nome), (s.aree || []).length > 0 && React.createElement("div", {
     className: "mini-riga"
@@ -3638,7 +3645,12 @@ function Dettaglio({
     className: "dettaglio-nota"
   }, s.nota), React.createElement("div", {
     className: "azioni"
-  }, s.url && React.createElement("a", {
+  }, s.file_url && React.createElement("a", {
+    className: "btn primario",
+    href: s.file_url,
+    target: "_blank",
+    rel: "noopener noreferrer"
+  }, "▶ Apri il video salvato"), s.url && React.createElement("a", {
     className: "btn",
     href: s.url,
     target: "_blank",
@@ -3712,6 +3724,7 @@ function FormSpunto({
     preferito: false,
     anteprima: null,
     anteprima_path: null,
+    file_url: "",
     tipo: "nota"
   }, iniziale));
   const [immagine, setImmagine] = useState(null);
@@ -3849,13 +3862,15 @@ function FormSpunto({
         path = null;
       }
       const url = info ? info.url : "";
-      const tipo = info ? tipoDaLink(info) : fileVideo ? "video" : anteprima ? "immagine" : "nota";
+      const fileUrl = f.file_url && f.file_url.trim() ? normalizzaUrl(f.file_url) : "";
+      const tipo = info ? tipoDaLink(info) : fileUrl ? "video" : fileVideo ? "video" : anteprima ? "immagine" : "nota";
       const titolo = f.titolo.trim() || (info ? info.nome : "") || f.nota.trim().slice(0, 40) || "Senza titolo";
       onSalva({
         id: f.id || uid(),
         tipo,
         titolo,
         url,
+        file_url: fileUrl,
         nota: f.nota.trim(),
         fonte: f.fonte.trim(),
         aree: f.aree,
@@ -3954,6 +3969,18 @@ function FormSpunto({
   }, "Togli anteprima")), stato && React.createElement("p", {
     className: "suggerimento"
   }, stato), React.createElement("label", {
+    className: "etichetta"
+  }, "Link al video salvato (iCloud, Google Drive, Dropbox…)"), React.createElement("input", {
+    className: "campo-in",
+    placeholder: "facoltativo: incolla il link di condivisione del file",
+    value: f.file_url || "",
+    onChange: e => setF(x => ({
+      ...x,
+      file_url: e.target.value
+    }))
+  }), React.createElement("p", {
+    className: "suggerimento"
+  }, "Per un video che tieni su iCloud: Foto → Condividi → Copia link iCloud. Toccandolo dopo, il video si apre dal tuo spazio."), React.createElement("label", {
     className: "etichetta"
   }, "Titolo"), React.createElement("input", {
     className: "campo-in",
@@ -6143,7 +6170,7 @@ function vocePerSpunto(s, portieri, n) {
     tipoEtichetta: info && info.nome && info.piattaforma !== "web" ? info.nome : s.tipo === "immagine" ? "Immagine" : s.tipo === "nota" ? "Appunto" : s.tipo === "link" ? "Link" : "Video",
     titolo: s.titolo || "Senza titolo",
     meta,
-    url: s.url || "",
+    url: s.url || s.file_url || "",
     nota: s.nota || "",
     anteprima: s.anteprima || "",
   };
@@ -7213,6 +7240,7 @@ function PlayerVelo({ s, onChiudi }) {
       ) : <p className="vuoto-msg">Per questo link non c'è un lettore: usa “Apri l'originale”.</p>}
       {s.nota && <p className="dettaglio-nota">{s.nota}</p>}
       <div className="azioni">
+        {s.file_url && <a className="btn primario" href={s.file_url} target="_blank" rel="noopener noreferrer">▶ Apri il video salvato</a>}
         {s.url && <a className="btn" href={s.url} target="_blank" rel="noopener noreferrer">↗ Apri su {info && info.nome ? info.nome : "il sito"}</a>}
         <button className="btn" onClick={onChiudi}>Chiudi</button>
       </div>
@@ -7236,6 +7264,7 @@ function Scheda({ s, onApri, onPreferito, extra }) {
         <p className="card-titolo">{s.titolo || "Senza titolo"}</p>
         {s.nota && <p className="card-nota">{s.nota}</p>}
         {s.fonte && <p className="card-meta">{s.fonte}</p>}
+        {s.file_url && <p className="card-meta">☁️ Video salvato</p>}
         {settoreDi(s.settore) && <p className="card-meta">{settoreDi(s.settore).icona} {settoreDi(s.settore).nome}</p>}
         {(s.aree || []).length > 0 && (
           <div className="mini-riga">{(s.aree || []).map((a) => <span className="mini" key={a}>{a}</span>)}</div>
@@ -7299,6 +7328,7 @@ function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, on
       )}
       {s.nota && <p className="dettaglio-nota">{s.nota}</p>}
       <div className="azioni">
+        {s.file_url && <a className="btn primario" href={s.file_url} target="_blank" rel="noopener noreferrer">▶ Apri il video salvato</a>}
         {s.url && <a className="btn" href={s.url} target="_blank" rel="noopener noreferrer">↗ Apri l'originale{info && info.nome ? " su " + info.nome : ""}</a>}
         <button className="btn" onClick={() => onPreferito(s)}>{s.preferito ? "★ Nei preferiti" : "☆ Metti nei preferiti"}</button>
         <button className="btn" onClick={() => setMenuSel((v) => !v)}>📂 Selezioni</button>
@@ -7330,7 +7360,7 @@ function Dettaglio({ s, selezioni, portieri, onChiudi, onModifica, onElimina, on
 }
 
 function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva, onAnnulla, avvisa }) {
-  const [f, setF] = useState(() => Object.assign({ url: "", titolo: "", nota: "", fonte: "", aree: [], settore: "", portieri: [], preferito: false, anteprima: null, anteprima_path: null, tipo: "nota" }, iniziale));
+  const [f, setF] = useState(() => Object.assign({ url: "", titolo: "", nota: "", fonte: "", aree: [], settore: "", portieri: [], preferito: false, anteprima: null, anteprima_path: null, file_url: "", tipo: "nota" }, iniziale));
   const [immagine, setImmagine] = useState(null);
   const [togliAnteprima, setTogliAnteprima] = useState(false);
   const [stato, setStato] = useState("");
@@ -7448,11 +7478,12 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
         path = null;
       }
       const url = info ? info.url : "";
-      const tipo = info ? tipoDaLink(info) : fileVideo ? "video" : anteprima ? "immagine" : "nota";
+      const fileUrl = f.file_url && f.file_url.trim() ? normalizzaUrl(f.file_url) : "";
+      const tipo = info ? tipoDaLink(info) : fileUrl ? "video" : fileVideo ? "video" : anteprima ? "immagine" : "nota";
       const titolo = f.titolo.trim() || (info ? info.nome : "") || f.nota.trim().slice(0, 40) || "Senza titolo";
       onSalva({
         id: f.id || uid(),
-        tipo, titolo, url,
+        tipo, titolo, url, file_url: fileUrl,
         nota: f.nota.trim(),
         fonte: f.fonte.trim(),
         aree: f.aree,
@@ -7507,6 +7538,10 @@ function FormSpunto({ iniziale, areeDisponibili, fonti, portieri, store, onSalva
         </div>
       )}
       {stato && <p className="suggerimento">{stato}</p>}
+
+      <label className="etichetta">Link al video salvato (iCloud, Google Drive, Dropbox…)</label>
+      <input className="campo-in" placeholder="facoltativo: incolla il link di condivisione del file" value={f.file_url || ""} onChange={(e) => setF((x) => ({ ...x, file_url: e.target.value }))} />
+      <p className="suggerimento">Per un video che tieni su iCloud: Foto → Condividi → Copia link iCloud. Toccandolo dopo, il video si apre dal tuo spazio.</p>
 
       <label className="etichetta">Titolo</label>
       <input className="campo-in" placeholder="es. Uscita alta su cross, difesa a 4" value={f.titolo} onChange={(e) => setF((x) => ({ ...x, titolo: e.target.value }))} />
